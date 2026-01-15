@@ -71,7 +71,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         let { data: profile } = await supabaseAdmin
             .from('profiles')
             .select('id, phone')
-            .eq('phone', from)
+            .eq('phone', params["WaId"])
             .single();
 
         if (!profile) {
@@ -79,7 +79,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
             const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
                 phone: from,
                 phone_confirm: true, // Esto es clave: marcamos como verificado sin enviar SMS
-                user_metadata: { source: 'whatsapp' },
+                user_metadata: { source: 'whatsapp', channelMetadata: channelMetadata },
 
             });
 
