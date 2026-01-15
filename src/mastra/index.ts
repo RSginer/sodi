@@ -7,7 +7,8 @@ import { weatherWorkflow } from './workflows/weather-workflow';
 import { weatherAgent } from './agents/weather-agent';
 import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';
 
-import routes from '../views';
+import views from '../views';
+import { whatsappWebhook } from './api/whatsapp';
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
@@ -27,8 +28,10 @@ export const mastra = new Mastra({
     default: { enabled: true },
   }),
   server: {
+    middleware: [],
     apiRoutes: [
-      ...routes,
+      ...views,
+      whatsappWebhook,
     ]
   }
 });
