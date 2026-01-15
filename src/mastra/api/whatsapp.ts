@@ -48,6 +48,17 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
     const messageBody = params["Body"] || "";
     const messageSid = params["MessageSid"] || "";
+    const channelMetadata = JSON.parse(params.ChannelMetadata) as {
+        type: string;
+        data: {
+            context: {
+                ProfileName: string;
+                WaId: string;
+            };
+        };
+    };
+
+    const threadId = channelMetadata.data.context.WaId;
 
     try {
       if (messageSid?.startsWith("SM")) {
@@ -62,10 +73,10 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
       }
 
       const agent = c.var.mastra.getAgent("weatherAgent");
-      const result = await agent.generate([{
-        role: "user",
-        content: messageBody,
-      }]);
+      const result = await agent.generate(messageBody, {
+        threadId: threadId,
+        resourceId: threadId
+      });
 
       const aiResponse = result.text;
 
