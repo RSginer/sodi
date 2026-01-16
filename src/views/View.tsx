@@ -3,22 +3,37 @@ import type { FC } from 'hono/jsx'
 const Layout: FC = (props) => {
     return (
         <html>
+            <head>
+                <title>{props.userName} termina el registro de VERI*FACTU</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <style>
+                    {`
+                        body {
+                            margin: 0;
+                            padding: 0;
+                            width: 100%;
+                            height: 100%;
+                        }
+                        iframe {
+                            width: 100%;
+                            height: 100%;
+                            border: none;
+                        }
+                    `}
+                </style>
+            </head>
             <body>{props.children}</body>
         </html>
     )
 }
 
-const View: FC<{ messages: string[] }> = (props: {
-    messages: string[]
+const View: FC<{ userName: string, verifactuLink: string }> = (props: {
+    userName: string,
+    verifactuLink: string
 }) => {
     return (
-        <Layout>
-            <h1>Hello Hono!</h1>
-            <ul>
-                {props.messages.map((message) => {
-                    return <li>{message}!!</li>
-                })}
-            </ul>
+        <Layout userName={props.userName}>
+            <iframe src={props.verifactuLink} width="100%" height="100%"></iframe>
         </Layout>
     )
 }

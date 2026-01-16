@@ -32,7 +32,7 @@ export const sendToVerifactuTool = createTool({
   execute: async (inputData, context) => {
     const memoryContext = parseMemoryRequestContext(context?.requestContext);
     const resourceId = memoryContext?.resourceId;
-    
+
     if (!resourceId) {
       return {
         success: false,
@@ -95,7 +95,7 @@ export const sendToVerifactuTool = createTool({
 
       // Validate required fields
       const missingFields: string[] = [];
-      
+
       if (userType === 'empresa') {
         if (!companyName) missingFields.push('nombre de empresa');
         if (!taxCode) missingFields.push('CIF');
@@ -200,9 +200,9 @@ export const sendToVerifactuTool = createTool({
 
       if (!entryResponse.ok) {
         const errorText = await entryResponse.text();
-        logger.error('Error creating silo entry', { 
-          status: entryResponse.status, 
-          error: errorText 
+        logger.error('Error creating silo entry', {
+          status: entryResponse.status,
+          error: errorText
         });
         return {
           success: false,
@@ -230,9 +230,9 @@ export const sendToVerifactuTool = createTool({
 
       if (!jobResponse.ok) {
         const errorText = await jobResponse.text();
-        logger.error('Error creating job', { 
-          status: jobResponse.status, 
-          error: errorText 
+        logger.error('Error creating job', {
+          status: jobResponse.status,
+          error: errorText
         });
         return {
           success: false,
@@ -250,11 +250,10 @@ export const sendToVerifactuTool = createTool({
       // The registration link is created by the "Register supplier" step in the workflow
       // We'll need to wait a bit or fetch it separately
       let registrationLink: string | undefined;
-      
+
       try {
         // Wait a moment for the workflow to process
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         const fetchEntryResponse = await fetch(`${INVOPOP_API_BASE}/silo/v1/entries/${siloEntryId}`, {
           method: 'GET',
           headers: {
@@ -267,7 +266,16 @@ export const sendToVerifactuTool = createTool({
           const meta = entryDetails.meta || [];
           const verifactuMeta = meta.find((m: any) => m.src === 'verifactu' && m.key === 'link');
           if (verifactuMeta?.link_url) {
-            registrationLink = verifactuMeta.link_url;
+            registrationLink = process.env.PUBLIC_URL + "/verifactu?id=" + resourceId;
+          }
+
+          const { error } = await supabase
+            .from('profiles')
+            .update({ verifactu_link: verifactuMeta.link_url, verifactu_status: 'processing' })
+            .eq('id', resourceId)
+
+          if (error) {
+            logger.error("Error updating profile", { error: error.message, code: error.code, details: error.details });
           }
         }
       } catch (metaError) {
@@ -277,7 +285,7 @@ export const sendToVerifactuTool = createTool({
 
       return {
         success: true,
-        message: `✅ Proveedor registrado en Invopop. El proceso de registro de VERI*FACTU ha comenzado.${registrationLink ? ` El usuario debe completar el registro en: ${registrationLink}` : ''}`,
+        message: `Proveedor registrado con éxito. El proceso de registro de VERI*FACTU ha comenzado.${registrationLink ? ` El usuario debe completar el registro en: ${registrationLink}` : ''}`,
         siloEntryId,
         jobId,
         registrationLink,

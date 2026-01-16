@@ -10,10 +10,8 @@ const logger = new PinoLogger({
 });
 
 
-type UserTier = {
-    "user-tier": "enterprise" | "pro";
-};
 
+const MessagingResponse = twilio.twiml.MessagingResponse;
 
 export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
     method: "POST",
@@ -54,7 +52,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         }
 
         const messageBody = params["Body"] || "";
-        const messageSid = params["MessageSid"] || "";
+        const messageSid = params["MessageSid"] || params["SmsMessageSid"] || params["SmsSid"] || "";
         const channelMetadata = JSON.parse(params.ChannelMetadata) as {
             type: string;
             data: {
@@ -69,7 +67,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
         let { data: profile } = await supabase
             .from('profiles')
-            .select('id, phone, invoapp_data, name, email, verifactu_completed')
+            .select('id, phone, invoapp_data, name, email, verifactu_completed, verifactu_status, verifactu_link')
             .eq('phone', params["WaId"])
             .single();
 
@@ -84,7 +82,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
             if (authError) return c.json({ error: authError.message }, 500);
 
-            profile = { id: authUser.user.id, phone: from, invoapp_data: null, name: null, email: null, verifactu_completed: false };
+            profile = { id: authUser.user.id, phone: from, invoapp_data: null, name: null, email: null, verifactu_completed: false, verifactu_status: null, verifactu_link: null };
         }
 
         const invoappData = profile.invoapp_data as any;
@@ -94,26 +92,52 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         const hasAddress = invoappData?.addresses?.[0]?.street;
         const hasEmail = profile.email || invoappData?.emails?.[0]?.addr;
         const hasVerifactuCompleted = profile.verifactu_completed;
-        
+        const isVerifactuPending = profile.verifactu_status === 'processing';
+
         const isUserRegistered = hasName && hasDNI && hasTaxCode && hasAddress && hasEmail && hasVerifactuCompleted;
 
         try {
-            if (messageSid?.startsWith("SM")) {
-                try {
-                    await client.messaging.v2.typingIndicator.create({
+            // Send typing indicator via Twilio Messaging API using the actual messageSid
+            try {
+                const response = await fetch("https://messaging.twilio.com/v2/Indicators/Typing.json", {
+                    method: "POST",
+                    headers: {
+                        "Authorization":
+                            "Basic " +
+                            Buffer.from(
+                                `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
+                            ).toString("base64"),
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: new URLSearchParams({
                         messageId: messageSid,
-                        channel: "whatsapp",
-                    });
-                } catch (e) {
-                    logger.warn("Typing indicator failed, skipping...", { error: e });
+                        channel: "whatsapp"
+                    }).toString()
+                });
+                if (!response.ok) {
+                    logger.warn("Typing indicator failed, skipping...", { error: response.statusText });
                 }
+
+                logger.info("Typing indicator sent", { response: await response.json() });
+            } catch (e) {
+                logger.warn("Typing indicator failed, skipping...", { error: JSON.stringify(e) });
             }
+
+            if (isVerifactuPending) {
+                const response = new MessagingResponse();
+                response.message("Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro.");
+                response.message(process.env.PUBLIC_URL + "/verifactu?id=" + profile.id);
+                return c.body(response.toString(), 200, {
+                    "Content-Type": "text/xml",
+                });
+            }
+         
 
             const agentName = isUserRegistered ? 'weatherAgent' : 'onboardingAgent';
             const agent = c.var.mastra.getAgent(agentName);
-            
-            logger.info("Using agent", { 
-                agentName, 
+
+            logger.info("Using agent", {
+                agentName,
                 isUserRegistered,
                 hasName,
                 hasDNI,
@@ -128,11 +152,12 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
             const aiResponse = result.text;
 
-            const MessagingResponse = twilio.twiml.MessagingResponse;
+     
             const response = new MessagingResponse();
             response.message(aiResponse);
-            c.header("Content-Type", "text/xml");
-            return c.body(response.toString(), 200);
+            return c.body(response.toString(), 200, {
+                "Content-Type": "text/xml",
+            });
 
 
         } catch (error) {
@@ -141,8 +166,9 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
             const MessagingResponse = twilio.twiml.MessagingResponse;
             const response = new MessagingResponse();
             response.message("Lo siento, tuve un error técnico. Intenta más tarde.");
-            c.header("Content-Type", "text/xml");
-            return c.body(response.toString(), 200);
+            return c.body(response.toString(), 200, {
+                "Content-Type": "text/xml",
+            });
         }
     },
 });
