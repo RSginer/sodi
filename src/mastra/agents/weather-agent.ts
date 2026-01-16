@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { weatherTool } from '../tools/weather-tool';
 import { scorers } from '../scorers/weather-scorer';
+import { PostgresStore } from '@mastra/pg';
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -22,6 +23,12 @@ export const weatherAgent = new Agent({
 `,
   model: 'openai/gpt-4o',
   tools: { weatherTool },
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'weather-agent-storage',
+      connectionString: process.env.DATABASE_URL,
+    }),
+  }),
   scorers: {
     toolCallAppropriateness: {
       scorer: scorers.toolCallAppropriatenessScorer,
@@ -44,6 +51,5 @@ export const weatherAgent = new Agent({
         rate: 1,
       },
     },
-  },
-  memory: new Memory(),
+  }
 });
