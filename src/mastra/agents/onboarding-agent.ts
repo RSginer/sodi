@@ -1,7 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { saveUserDataTool } from '../tools/save-user-data-tool';
 import { PostgresStore } from '@mastra/pg';
+
+import { saveUserDataTool } from '../tools/guardar-datos-usuario-tool';
 
 export const onboardingAgent = new Agent({
   id: 'onboarding-agent',

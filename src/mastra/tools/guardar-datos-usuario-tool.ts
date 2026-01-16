@@ -2,7 +2,13 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import { supabase } from '../supabase';
+import { PinoLogger } from '@mastra/loggers';
 
+const logger = new PinoLogger({
+    name: 'SaveUserDataTool',
+    level: 'info',
+  })
+  
 export const saveUserDataTool = createTool({
   id: 'save-user-data',
   description: `Saves user data in invoapp format for system registration.
@@ -19,8 +25,7 @@ export const saveUserDataTool = createTool({
     // Person data
     firstName: z.string().optional().describe('Person first name'),
     lastName: z.string().optional().describe('Person last name'),
-    dni: z.string().optional().describe('DNI/NIE for self-employed (e.g., 123456789A)'),
-    nif: z.string().optional().describe('NIF for self-employed (same as DNI, used as tax code)'),
+    nif: z.string().optional().describe('NIF for self-employed (e.g., 123456789A)'),
     
     // Company address
     companyAddressNumber: z.string().optional().describe('Company address number'),
@@ -58,7 +63,7 @@ export const saveUserDataTool = createTool({
     // Get existing data
     const { data: profile } = await supabase
       .from('profiles')
-      .select('invoapp_data')
+      .select('user_type, invoapp_data')
       .eq('id', resourceId)
       .single();
 
@@ -72,7 +77,7 @@ export const saveUserDataTool = createTool({
     };
 
     const savedFields: string[] = [];
-    const userType = inputData?.userType;
+    const userType = profile?.user_type || inputData?.userType;
 
     // Update company data
     if (inputData?.companyName) {
@@ -81,19 +86,19 @@ export const saveUserDataTool = createTool({
     }
 
     // Handle tax ID: CIF for companies, NIF for self-employed
+    // Ensure tax_id exists and preserve country if already set
+    if (!invoappData.tax_id) {
+      invoappData.tax_id = { country: "ES" };
+    }
+    if (!invoappData.tax_id.country) {
+      invoappData.tax_id.country = "ES";
+    }
+
     if (userType === 'empresa' && inputData?.cif) {
-      invoappData.tax_id = {
-        country: "ES",
-        code: inputData.cif,
-      };
+      invoappData.tax_id.code = inputData.cif;
       savedFields.push('CIF');
-    } else if (userType === 'autonomo' && (inputData?.nif || inputData?.dni)) {
-      // For self-employed, use NIF (or DNI if NIF not provided)
-      const taxCode = inputData.nif || inputData.dni;
-      invoappData.tax_id = {
-        country: "ES",
-        code: taxCode,
-      };
+    } else if (userType === 'autonomo' && inputData?.nif) {
+      invoappData.tax_id.code = inputData.nif;
       savedFields.push('NIF');
     }
 
@@ -113,11 +118,11 @@ export const saveUserDataTool = createTool({
       person.name.surname = inputData.lastName;
       savedFields.push('apellidos');
     }
-    if (inputData?.dni) {
+    if (inputData?.nif) {
       if (!person.identities) person.identities = [];
       person.identities = [{
         key: "national",
-        code: inputData.dni,
+        code: inputData.nif,
       }];
       savedFields.push('DNI');
     }
@@ -151,26 +156,53 @@ export const saveUserDataTool = createTool({
     }
 
     // Update email
+    let emailToSave: string | undefined;
     if (inputData?.email) {
       invoappData.emails = [{
         addr: inputData.email,
       }];
+      emailToSave = inputData.email;
+      
+      // Update email in Auth (non-blocking, log errors but don't fail)
+      try {
+        const { error: authError } = await supabase.auth.admin.updateUserById(resourceId, {
+          email: inputData.email,
+        });
+        if (authError) {
+          logger.warn("Failed to update email in Auth", { error: authError.message });
+        }
+      } catch (authErr) {
+        logger.warn("Exception updating email in Auth", { error: authErr });
+      }
+      
       savedFields.push('email');
     }
 
     // Save to Supabase
+    const updateData: any = {
+      invoapp_data: invoappData,
+      // Also save individual fields for easy access
+      user_type: userType,
+      name: person.name?.given || invoappData.name,
+    };
+    
+    // Save tax code (CIF or NIF) in cif field for easy access
+    if (invoappData.tax_id?.code) {
+      updateData.cif = invoappData.tax_id.code;
+    }
+    
+    // Save email if provided
+    if (emailToSave) {
+      updateData.email = emailToSave;
+    }
+    
     const { error } = await supabase
       .from('profiles')
-      .update({ 
-        invoapp_data: invoappData,
-        // Also save individual fields for easy access
-        name: person.name?.given || invoappData.name,
-        cif: invoappData.tax_id?.code,
-        email: inputData?.email,
-      })
+      .update(updateData)
       .eq('id', resourceId);
 
     if (error) {
+      logger.error("Error saving user data", { error });
       return {
         success: false,
         message: `Error al guardar: ${error.message}`,
