@@ -69,7 +69,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
         let { data: profile } = await supabase
             .from('profiles')
-            .select('id, phone, invoapp_data, name')
+            .select('id, phone, invoapp_data, name, email, verifactu_completed')
             .eq('phone', params["WaId"])
             .single();
 
@@ -84,7 +84,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
             if (authError) return c.json({ error: authError.message }, 500);
 
-            profile = { id: authUser.user.id, phone: from, invoapp_data: null, name: null };
+            profile = { id: authUser.user.id, phone: from, invoapp_data: null, name: null, email: null, verifactu_completed: false };
         }
 
         const invoappData = profile.invoapp_data as any;
@@ -92,8 +92,10 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         const hasDNI = invoappData?.people?.[0]?.identities?.[0]?.code;
         const hasTaxCode = invoappData?.tax_id?.code; // NIF for autonomo, CIF for empresa
         const hasAddress = invoappData?.addresses?.[0]?.street;
+        const hasEmail = profile.email || invoappData?.emails?.[0]?.addr;
+        const hasVerifactuCompleted = profile.verifactu_completed;
         
-        const isUserRegistered = hasName && hasDNI && hasTaxCode && hasAddress;
+        const isUserRegistered = hasName && hasDNI && hasTaxCode && hasAddress && hasEmail && hasVerifactuCompleted;
 
         try {
             if (messageSid?.startsWith("SM")) {

@@ -158,21 +158,26 @@ export const saveUserDataTool = createTool({
     // Update email
     let emailToSave: string | undefined;
     if (inputData?.email) {
+      const emailValue = inputData.email.trim();
+      logger.info("Saving email", { email: emailValue, resourceId });
+      
       invoappData.emails = [{
-        addr: inputData.email,
+        addr: emailValue,
       }];
-      emailToSave = inputData.email;
+      emailToSave = emailValue;
       
       // Update email in Auth (non-blocking, log errors but don't fail)
       try {
         const { error: authError } = await supabase.auth.admin.updateUserById(resourceId, {
-          email: inputData.email,
+          email: emailValue,
         });
         if (authError) {
-          logger.warn("Failed to update email in Auth", { error: authError.message });
+          logger.warn("Failed to update email in Auth", { error: authError.message, email: emailValue });
+        } else {
+          logger.info("Email updated in Auth successfully", { email: emailValue });
         }
       } catch (authErr) {
-        logger.warn("Exception updating email in Auth", { error: authErr });
+        logger.warn("Exception updating email in Auth", { error: authErr, email: emailValue });
       }
       
       savedFields.push('email');
@@ -194,20 +199,30 @@ export const saveUserDataTool = createTool({
     // Save email if provided
     if (emailToSave) {
       updateData.email = emailToSave;
+      logger.info("Including email in update", { email: emailToSave });
     }
     
-    const { error } = await supabase
+    logger.info("Updating profile", { resourceId, updateData: { ...updateData, invoapp_data: '[...]' } });
+    
+    const { error, data: updatedProfile } = await supabase
       .from('profiles')
       .update(updateData)
-      .eq('id', resourceId);
+      .eq('id', resourceId)
+      .select('email, invoapp_data')
+      .single();
 
     if (error) {
-      logger.error("Error saving user data", { error });
+      logger.error("Error saving user data", { error: error.message, code: error.code, details: error.details });
       return {
         success: false,
         message: `Error al guardar: ${error.message}`,
       };
     }
+    
+    logger.info("Profile updated successfully", { 
+      savedEmail: updatedProfile?.email, 
+      invoappEmail: (updatedProfile?.invoapp_data as any)?.emails?.[0]?.addr 
+    });
 
     return {
       success: true,

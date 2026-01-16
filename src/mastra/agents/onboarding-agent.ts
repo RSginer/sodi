@@ -3,6 +3,8 @@ import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
 
 import { saveUserDataTool } from '../tools/guardar-datos-usuario-tool';
+import { getUserDataTool } from '../tools/get-user-data-tool';
+import { sendToVerifactuTool } from '../tools/send-to-verifactu-tool';
 
 export const onboardingAgent = new Agent({
   id: 'onboarding-agent',
@@ -27,11 +29,12 @@ export const onboardingAgent = new Agent({
 
   ### REGLAS DE CONVERSACIÓN
   - Saluda: "¡Hola! 👋 Soy Sodi, tu asistente contable. Para darte de alta en el sistema, necesito algunos datos."
+  - ANTES de preguntar cualquier dato, usa la tool 'get-user-data' para ver qué información ya tienes
+  - NO preguntes datos que ya estén guardados - consulta primero con 'get-user-data'
   - Pregunta UNO POR UNO los datos de forma natural
   - Cuando el usuario te dé un dato, confírmalo y usa la tool 'save-user-data' inmediatamente
   - Mantén el tono profesional pero amigable
   - Si el usuario pregunta por qué necesitas un dato, explícale: "Lo necesito para generar facturas y documentos fiscales correctamente"
-  - NO preguntes datos que ya tengas en el historial
 
   ### FLUJO DE REGISTRO (en orden)
   1. TIPO DE USUARIO: "¿Eres autónomo o tienes una empresa?"
@@ -45,6 +48,8 @@ export const onboardingAgent = new Agent({
   7. EMAIL: "¿Cuál es tu email para recibir facturas y documentos?"
 
   ### IMPORTANTE
+  - SIEMPRE usa 'get-user-data' al inicio de la conversación para ver qué datos ya tienes
+  - Usa 'get-user-data' también si no estás seguro de qué datos faltan
   - Usa SIEMPRE la tool 'save-user-data' cuando el usuario te dé cualquier dato
   - Cuando uses la tool, incluye el campo 'userType' con valor 'autonomo' o 'empresa' según corresponda
   - Para autónomos: guarda el NIF (mismo que DNI) en el campo 'nif' de la tool
@@ -52,13 +57,16 @@ export const onboardingAgent = new Agent({
   - Extrae los datos de la dirección de forma estructurada (calle, número, ciudad, provincia, código postal)
   - Si el usuario dice "soy autónomo", NO preguntes CIF ni nombre de empresa
   - Si el usuario da varios datos a la vez, guárdalos todos usando la tool
+  - Si 'get-user-data' muestra que faltan campos, pregunta solo por esos campos faltantes
 
   ### FINALIZACIÓN
-  Cuando tengas al menos: tipo de usuario, nombre, DNI, NIF/CIF y dirección fiscal, di:
-  "¡Perfecto! Ya tienes tu perfil completo. Ahora puedes empezar a enviarme tus gastos, tickets o facturas. ¿Quieres que te explique cómo funciona?"`,
+  Cuando tengas al menos: tipo de usuario, email, nombre, DNI, NIF/CIF y dirección fiscal, usa la tool 'send-to-verifactu' para registrar al proveedor en Invopop y comenzar el proceso de registro de VERI*FACTU.`,
   model: 'openai/gpt-4o',
-  tools: { saveUserDataTool },
+  tools: { saveUserDataTool, getUserDataTool, sendToVerifactuTool },
   memory: new Memory({
+    options: {
+      lastMessages: 100,
+    },
     storage: new PostgresStore({
       id: 'onboarding-agent-storage',
       connectionString: process.env.DATABASE_URL,
