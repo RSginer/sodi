@@ -21,7 +21,11 @@ export const invopopVerifactuWebhook = registerApiRoute("/invopop/verifactu/webh
         const invopopClient = new InvopopClient();
         const siloEntry = await invopopClient.getSiloEntryById(body.silo_entry_id);
         logger.info("Silo entry", { siloEntry });
-        const profileId = siloEntry.data.doc.meta.user;
+        const profileId = siloEntry?.data?.doc?.meta?.user;
+        
+        if (!profileId) {
+            return c.json({ error: 'Profile ID not found' }, 404);
+        }
 
         const { data: profile, error: profileError } = await supabase.from('profiles')
             .select('id, name, email, phone, invopop_data, verifactu_completed, verifactu_status').eq('id', profileId).single();
