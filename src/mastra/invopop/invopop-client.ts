@@ -1,0 +1,191 @@
+import { PinoLogger } from '@mastra/loggers';
+
+const logger = new PinoLogger({ name: 'InvopopClient', level: 'info' });
+
+const INVOPOP_API_BASE = 'https://api.invopop.com';
+const INVOPOP_API_TOKEN = process.env.INVOPOP_API_TOKEN;
+const INVOPOP_WORKFLOW_ID = process.env.INVOPOP_WORKFLOW_ID;
+
+export interface InvopopConfig {
+  apiBase?: string;
+  apiToken?: string;
+  workflowId?: string;
+}
+
+export interface GoblAddress {
+  num: string;
+  street: string;
+  locality: string;
+  region: string;
+  code: string;
+  country: string;
+}
+
+export interface GoblParty {
+  $schema: string;
+  name: string;
+  tax_id: {
+    country: string;
+    code: string;
+  };
+  addresses: GoblAddress[];
+  emails: { addr: string }[];
+  people?: {
+    name: {
+      given: string;
+      surname: string;
+    };
+    identities: {
+      key: string;
+      code: string;
+    }[];
+    addresses: GoblAddress[];
+  }[];
+}
+
+export class InvopopClient {
+  private apiBase: string;
+  private apiToken: string;
+  private workflowId: string;
+
+  constructor(config: InvopopConfig = {}) {
+    this.apiBase = config.apiBase || INVOPOP_API_BASE;
+    this.apiToken = config.apiToken || INVOPOP_API_TOKEN || '';
+    this.workflowId = config.workflowId || INVOPOP_WORKFLOW_ID || '';
+  }
+
+  validateConfig() {
+    if (!this.apiToken || !this.workflowId) {
+      const missing = !this.apiToken ? 'INVOPOP_API_TOKEN' : 'INVOPOP_WORKFLOW_ID';
+      logger.error(`${missing} not configured`);
+      return { success: false, message: `Error de configuración: falta ${missing}` };
+    }
+    return { success: true };
+  }
+
+  async createSiloEntry(goblParty: any): Promise<string> {
+    const response = await fetch(`${this.apiBase}/silo/v1/entries`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data: goblParty,
+        folder: 'suppliers',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Error creating silo entry', {
+        status: response.status,
+        error: errorText
+      });
+      throw new Error(`Error al crear entrada en Invopop: ${response.status} - ${errorText}`);
+    }
+
+    const entryData = await response.json();
+    return entryData.id;
+  }
+
+  async createWorkflowJob(siloEntryId: string): Promise<string> {
+    const response = await fetch(`${this.apiBase}/transform/v1/jobs`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        workflow_id: this.workflowId,
+        silo_entry_id: siloEntryId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Error creating job', {
+        status: response.status,
+        error: errorText
+      });
+      throw new Error(`Error al crear job en Invopop: ${response.status} - ${errorText}`);
+    }
+
+    const jobData = await response.json();
+    return jobData.id;
+  }
+
+  async getRegistrationLink(siloEntryId: string, resourceId: string): Promise<string | undefined> {
+    try {
+      const response = await fetch(`${this.apiBase}/silo/v1/entries/${siloEntryId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const entryDetails = await response.json();
+        const verifactuMeta = (entryDetails.meta || []).find((m: any) => m.src === 'verifactu' && m.key === 'link');
+        
+        if (verifactuMeta?.link_url) {
+          return verifactuMeta.link_url;
+        }
+      }
+    } catch (error) {
+      logger.warn('Could not fetch registration link', { error });
+    }
+    return undefined;
+  }
+
+  // Helper to build GOBL address
+  static buildGoblAddress(addr: any): GoblAddress {
+    return {
+      num: addr.num || '',
+      street: addr.street,
+      locality: addr.locality,
+      region: addr.region,
+      code: addr.code,
+      country: 'ES',
+    };
+  }
+
+  // Helper to build GOBL party
+  static buildGoblParty(
+    userType: 'autonomo' | 'empresa',
+    companyName: string | undefined,
+    firstName: string | undefined,
+    lastName: string | undefined,
+    dni: string | undefined,
+    taxCode: string,
+    email: string,
+    companyAddress: any,
+    personalAddress: any
+  ) {
+    const addresses = [InvopopClient.buildGoblAddress(companyAddress)];
+    const emails = [{ addr: email }];
+    
+    if (userType === 'empresa') {
+      return {
+        $schema: 'https://gobl.org/draft-0/org/party',
+        name: companyName,
+        tax_id: { country: 'ES', code: taxCode },
+        addresses,
+        emails,
+        people: [{
+          name: { given: firstName, surname: lastName },
+          identities: [{ key: 'national', code: dni }],
+          addresses: personalAddress ? [InvopopClient.buildGoblAddress(personalAddress)] : [],
+        }],
+      };
+    } else {
+      return {
+        $schema: 'https://gobl.org/draft-0/org/party',
+        name: `${firstName} ${lastName}`,
+        tax_id: { country: 'ES', code: taxCode },
+        addresses,
+        emails,
+      };
+    }
+  }
+}

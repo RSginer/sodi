@@ -69,7 +69,7 @@ export const getUserDataTool = createTool({
       // Get user data from Supabase
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('user_type, name, cif, email, invoapp_data')
+        .select('user_type, name, cif, email, invopop_data')
         .eq('id', resourceId)
         .single();
 
@@ -91,25 +91,25 @@ export const getUserDataTool = createTool({
         };
       }
 
-      const invoappData = profile.invoapp_data as any;
+      const invopopData = profile.invopop_data as any;
       const userType = profile.user_type as 'autonomo' | 'empresa' | null;
 
       // Extract person data
-      const person = invoappData?.people?.[0];
+      const person = invopopData?.people?.[0];
       const firstName = person?.name?.given || null;
       const lastName = person?.name?.surname || null;
       const dni = person?.identities?.[0]?.code || null;
       
       // Extract tax codes
-      const taxCode = invoappData?.tax_id?.code || profile.cif || null;
+      const taxCode = invopopData?.tax_id?.code || profile.cif || null;
       const nif = userType === 'autonomo' ? taxCode : null;
       const cif = userType === 'empresa' ? taxCode : null;
       
       // Extract company name
-      const companyName = invoappData?.name || null;
+      const companyName = invopopData?.name || null;
       
       // Extract addresses
-      const companyAddressData = invoappData?.addresses?.[0];
+      const companyAddressData = invopopData?.addresses?.[0];
       const companyAddress = companyAddressData ? {
         street: companyAddressData.street || null,
         number: companyAddressData.num || null,
@@ -128,7 +128,7 @@ export const getUserDataTool = createTool({
       } : null;
 
       // Extract email
-      const email = profile.email || invoappData?.emails?.[0]?.addr || null;
+      const email = profile.email || invopopData?.emails?.[0]?.addr || null;
 
       // Build full name
       const fullName = profile.name || (firstName && lastName ? `${firstName} ${lastName}` : firstName || companyName) || null;

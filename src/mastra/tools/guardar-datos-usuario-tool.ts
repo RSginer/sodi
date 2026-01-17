@@ -11,8 +11,8 @@ const logger = new PinoLogger({
   
 export const saveUserDataTool = createTool({
   id: 'save-user-data',
-  description: `Saves user data in invoapp format for system registration.
-  Data is saved in JSON format compatible with invoapp (gobl.org schema).
+  description: `Saves user data in invopop format for system registration.
+  Data is saved in JSON format compatible with invopop (gobl.org schema).
   You can save partial data - it will be completed gradually.`,
   inputSchema: z.object({
     // User type
@@ -63,12 +63,11 @@ export const saveUserDataTool = createTool({
     // Get existing data
     const { data: profile } = await supabase
       .from('profiles')
-      .select('user_type, invoapp_data')
+      .select('user_type, invopop_data')
       .eq('id', resourceId)
       .single();
 
-    // Build invoapp object from existing data or create new one
-    let invoappData: any = profile?.invoapp_data || {
+    let invopopData: any = profile?.invopop_data || {
       $schema: "https://gobl.org/draft-0/org/party",
       tax_id: { country: "ES" },
       people: [{}],
@@ -81,32 +80,32 @@ export const saveUserDataTool = createTool({
 
     // Update company data
     if (inputData?.companyName) {
-      invoappData.name = inputData.companyName;
+      invopopData.name = inputData.companyName;
       savedFields.push('nombre de empresa');
     }
 
     // Handle tax ID: CIF for companies, NIF for self-employed
     // Ensure tax_id exists and preserve country if already set
-    if (!invoappData.tax_id) {
-      invoappData.tax_id = { country: "ES" };
+    if (!invopopData.tax_id) {
+      invopopData.tax_id = { country: "ES" };
     }
-    if (!invoappData.tax_id.country) {
-      invoappData.tax_id.country = "ES";
+    if (!invopopData.tax_id.country) {
+      invopopData.tax_id.country = "ES";
     }
 
     if (userType === 'empresa' && inputData?.cif) {
-      invoappData.tax_id.code = inputData.cif;
+      invopopData.tax_id.code = inputData.cif;
       savedFields.push('CIF');
     } else if (userType === 'autonomo' && inputData?.nif) {
-      invoappData.tax_id.code = inputData.nif;
+      invopopData.tax_id.code = inputData.nif;
       savedFields.push('NIF');
     }
 
     // Update person data
-    if (!invoappData.people || invoappData.people.length === 0) {
-      invoappData.people = [{}];
+    if (!invopopData.people || invopopData.people.length === 0) {
+      invopopData.people = [{}];
     }
-    const person = invoappData.people[0];
+    const person = invopopData.people[0];
 
     if (inputData?.firstName) {
       if (!person.name) person.name = {};
@@ -129,10 +128,10 @@ export const saveUserDataTool = createTool({
 
     // Update company address
     if (inputData?.companyAddressStreet) {
-      if (!invoappData.addresses || invoappData.addresses.length === 0) {
-        invoappData.addresses = [{}];
+      if (!invopopData.addresses || invopopData.addresses.length === 0) {
+        invopopData.addresses = [{}];
       }
-      const companyAddress = invoappData.addresses[0];
+      const companyAddress = invopopData.addresses[0];
       if (inputData.companyAddressNumber) companyAddress.num = inputData.companyAddressNumber;
       if (inputData.companyAddressStreet) companyAddress.street = inputData.companyAddressStreet;
       if (inputData.companyAddressCity) companyAddress.locality = inputData.companyAddressCity;
@@ -161,7 +160,7 @@ export const saveUserDataTool = createTool({
       const emailValue = inputData.email.trim();
       logger.info("Saving email", { email: emailValue, resourceId });
       
-      invoappData.emails = [{
+      invopopData.emails = [{
         addr: emailValue,
       }];
       emailToSave = emailValue;
@@ -185,15 +184,15 @@ export const saveUserDataTool = createTool({
 
     // Save to Supabase
     const updateData: any = {
-      invoapp_data: invoappData,
+      invopop_data: invopopData,
       // Also save individual fields for easy access
       user_type: userType,
-      name: person.name?.given || invoappData.name,
+      name: person.name?.given || invopopData.name,
     };
     
     // Save tax code (CIF or NIF) in cif field for easy access
-    if (invoappData.tax_id?.code) {
-      updateData.cif = invoappData.tax_id.code;
+    if (invopopData.tax_id?.code) {
+      updateData.cif = invopopData.tax_id.code;
     }
     
     // Save email if provided
@@ -202,13 +201,13 @@ export const saveUserDataTool = createTool({
       logger.info("Including email in update", { email: emailToSave });
     }
     
-    logger.info("Updating profile", { resourceId, updateData: { ...updateData, invoapp_data: '[...]' } });
+    logger.info("Updating profile", { resourceId, updateData: { ...updateData, invopop_data: '[...]' } });
     
     const { error, data: updatedProfile } = await supabase
       .from('profiles')
       .update(updateData)
       .eq('id', resourceId)
-      .select('email, invoapp_data')
+      .select('email, invopop_data')
       .single();
 
     if (error) {
@@ -221,7 +220,7 @@ export const saveUserDataTool = createTool({
     
     logger.info("Profile updated successfully", { 
       savedEmail: updatedProfile?.email, 
-      invoappEmail: (updatedProfile?.invoapp_data as any)?.emails?.[0]?.addr 
+      invopopEmail: (updatedProfile?.invopop_data as any)?.emails?.[0]?.addr 
     });
 
     return {

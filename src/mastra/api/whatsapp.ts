@@ -67,7 +67,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
         let { data: profile } = await supabase
             .from('profiles')
-            .select('id, phone, invoapp_data, name, email, verifactu_completed, verifactu_status, verifactu_link')
+            .select('id, phone, invopop_data, name, email, verifactu_completed, verifactu_status, verifactu_link')
             .eq('phone', params["WaId"])
             .single();
 
@@ -82,15 +82,15 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
             if (authError) return c.json({ error: authError.message }, 500);
 
-            profile = { id: authUser.user.id, phone: from, invoapp_data: null, name: null, email: null, verifactu_completed: false, verifactu_status: null, verifactu_link: null };
+            profile = { id: authUser.user.id, phone: from, invopop_data: null, name: null, email: null, verifactu_completed: false, verifactu_status: null, verifactu_link: null };
         }
 
-        const invoappData = profile.invoapp_data as any;
-        const hasName = profile.name || (invoappData?.people?.[0]?.name?.given);
-        const hasDNI = invoappData?.people?.[0]?.identities?.[0]?.code;
-        const hasTaxCode = invoappData?.tax_id?.code; // NIF for autonomo, CIF for empresa
-        const hasAddress = invoappData?.addresses?.[0]?.street;
-        const hasEmail = profile.email || invoappData?.emails?.[0]?.addr;
+        const invopopData = profile.invopop_data as any;
+        const hasName = profile.name || (invopopData?.people?.[0]?.name?.given);
+        const hasDNI = invopopData?.people?.[0]?.identities?.[0]?.code;
+        const hasTaxCode = invopopData?.tax_id?.code; // NIF for autonomo, CIF for empresa
+        const hasAddress = invopopData?.addresses?.[0]?.street;
+        const hasEmail = profile.email || invopopData?.emails?.[0]?.addr;
         const hasVerifactuCompleted = profile.verifactu_completed;
         const isVerifactuPending = profile.verifactu_status === 'processing';
 
