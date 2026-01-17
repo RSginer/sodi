@@ -101,10 +101,10 @@ export const saveUserDataTool = createTool({
       savedFields.push('NIF');
     }
 
-    // Update person data
     if (!invopopData.people || invopopData.people.length === 0) {
       invopopData.people = [{}];
     }
+    
     const person = invopopData.people[0];
 
     if (inputData?.firstName) {
@@ -187,7 +187,7 @@ export const saveUserDataTool = createTool({
       invopop_data: invopopData,
       // Also save individual fields for easy access
       user_type: userType,
-      name: person.name?.given || invopopData.name,
+      name: `${person.name?.given} ${person.name?.surname}`,
     };
     
     // Save tax code (CIF or NIF) in cif field for easy access
