@@ -18,6 +18,7 @@ export const weatherAgent = new Agent({
       - Keep responses concise but informative
       - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
       - If the user asks for activities, respond in the format they request.
+      - Don't use Markdown in the responses, use text plain in WhatsApp format.You can use emojis if appropriate. for bold use *word* and for italic use _word_.
 
       Use the weatherTool to fetch current weather data.
 `,
