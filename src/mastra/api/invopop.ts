@@ -48,7 +48,7 @@ export const invopopVerifactuWebhook = registerApiRoute("/invopop/verifactu/webh
                 await twilio.messages.create({
                     from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
                     to: `whatsapp:+${profile.phone}`,
-                    body: 'Tus datos para el registro de Veri*Factuse han enviado para su verificación, recibirás una notificación cuando el proceso esté completado.',
+                    body: 'Tus datos para el registro de Veri*Factu se han enviado para su verificación, recibirás una notificación cuando el proceso esté completado.',
                 });
                 break;
             case 'completed':
