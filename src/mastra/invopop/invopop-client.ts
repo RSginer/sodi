@@ -138,7 +138,7 @@ export class InvopopClient {
     return undefined;
   }
 
-  async getSiloEntryById(siloEntryId: string): Promise<SupplierEntry> {
+  async getSiloEntryById(siloEntryId: string): Promise<SupplierEntry | null> {
     try {
       const response = await fetch(`${this.apiBase}/silo/v1/entries/${siloEntryId}`, {
         method: 'GET',
