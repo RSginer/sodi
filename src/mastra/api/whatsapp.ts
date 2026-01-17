@@ -10,18 +10,13 @@ const logger = new PinoLogger({
 });
 
 
-
 const MessagingResponse = twilio.twiml.MessagingResponse;
 
 export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
     method: "POST",
     handler: async (c) => {
-        const accountSid = env<{ TWILIO_ACCOUNT_SID: string }>(c).TWILIO_ACCOUNT_SID;
         const authToken = env<{ TWILIO_AUTH_TOKEN: string }>(c).TWILIO_AUTH_TOKEN;
 
-        const client = twilio(accountSid, authToken, {
-            logLevel: "debug",
-        });
         const formData = await c.req.formData();
 
         const params: Record<string, string> = {};
@@ -42,7 +37,6 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
             logger.info("Valid Twilio signature", { isValid });
 
             if (!isValid) {
-                const MessagingResponse = twilio.twiml.MessagingResponse;
                 const response = new MessagingResponse();
                 response.message("No tienes permisos para acceder a este servicio.");
                 c.header("Content-Type", "text/xml");
@@ -52,7 +46,6 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         }
 
         const messageBody = params["Body"] || "";
-        const messageSid = params["MessageSid"] || params["SmsMessageSid"] || params["SmsSid"] || "";
         const channelMetadata = JSON.parse(params.ChannelMetadata) as {
             type: string;
             data: {
@@ -88,7 +81,7 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         const invopopData = profile.invopop_data as any;
         const hasName = profile.name || (invopopData?.people?.[0]?.name?.given);
         const hasDNI = invopopData?.people?.[0]?.identities?.[0]?.code;
-        const hasTaxCode = invopopData?.tax_id?.code; // NIF for autonomo, CIF for empresa
+        const hasTaxCode = invopopData?.tax_id?.code;
         const hasAddress = invopopData?.addresses?.[0]?.street;
         const hasEmail = profile.email || invopopData?.emails?.[0]?.addr;
         const hasVerifactuCompleted = profile.verifactu_completed;
@@ -97,36 +90,13 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         const isUserRegistered = hasName && hasDNI && hasTaxCode && hasAddress && hasEmail && hasVerifactuCompleted;
 
         try {
-            // Send typing indicator via Twilio Messaging API using the actual messageSid
-            try {
-                const response = await fetch("https://messaging.twilio.com/v2/Indicators/Typing.json", {
-                    method: "POST",
-                    headers: {
-                        "Authorization":
-                            "Basic " +
-                            Buffer.from(
-                                `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
-                            ).toString("base64"),
-                        "Content-Type": "application/x-www-form-urlencoded"
-                    },
-                    body: new URLSearchParams({
-                        messageId: messageSid,
-                        channel: "whatsapp"
-                    }).toString()
-                });
-                if (!response.ok) {
-                    logger.warn("Typing indicator failed, skipping...", { error: response.statusText });
-                }
-
-                logger.info("Typing indicator sent", { response: await response.json() });
-            } catch (e) {
-                logger.warn("Typing indicator failed, skipping...", { error: JSON.stringify(e) });
-            }
 
             if (isVerifactuPending) {
                 const response = new MessagingResponse();
+                
                 response.message("Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro.");
                 response.message(process.env.PUBLIC_URL + "/verifactu?id=" + profile.id);
+                
                 return c.body(response.toString(), 200, {
                     "Content-Type": "text/xml",
                 });
@@ -151,7 +121,6 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
             });
 
             const aiResponse = result.text;
-
      
             const response = new MessagingResponse();
             response.message(aiResponse);
@@ -163,7 +132,6 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
         } catch (error) {
             logger.error("Error processing message", { error });
 
-            const MessagingResponse = twilio.twiml.MessagingResponse;
             const response = new MessagingResponse();
             response.message("Lo siento, tuve un error técnico. Intenta más tarde.");
             return c.body(response.toString(), 200, {

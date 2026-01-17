@@ -41,7 +41,7 @@ export const sendToVerifactuTool = createTool({
     try {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('user_type, name, cif, email, invopop_data')
+        .select('user_type, name, cif, email, invopop_data, phone')
         .eq('id', resourceId)
         .single();
 
@@ -61,7 +61,7 @@ export const sendToVerifactuTool = createTool({
       const companyAddress = invopopData?.addresses?.[0];
       const personalAddress = person?.addresses?.[0];
       const email = profile.email || invopopData?.emails?.[0]?.addr;
-
+      const phone = profile.phone;
       const missingFields: string[] = [];
       
       if (userType === 'empresa') {
@@ -95,7 +95,11 @@ export const sendToVerifactuTool = createTool({
         taxCode,
         email,
         companyAddress,
-        personalAddress
+        personalAddress,
+        {
+          user: resourceId,
+          phone: phone,
+        }
       );
 
       logger.info('Creating silo entry in Invopop', { userType, taxCode });

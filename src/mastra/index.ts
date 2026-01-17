@@ -7,6 +7,7 @@ import { whatsappWebhook } from './api/whatsapp';
 import { PostgresStore } from "@mastra/pg";
 import { onboardingAgent } from './agents/onboarding-agent';
 import { weatherAgent } from './agents/weather-agent';
+import { invopopVerifactuWebhook } from './api/invopop';
 
 export const mastra = new Mastra({
   workflows: {  },
@@ -32,6 +33,7 @@ export const mastra = new Mastra({
     apiRoutes: [
       ...views,
       whatsappWebhook,
+      invopopVerifactuWebhook,
     ]
   }
 });

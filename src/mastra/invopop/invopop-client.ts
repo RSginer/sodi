@@ -138,6 +138,26 @@ export class InvopopClient {
     return undefined;
   }
 
+  async getSiloEntryById(siloEntryId: string): Promise<SupplierEntry> {
+    try {
+      const response = await fetch(`${this.apiBase}/silo/v1/entries/${siloEntryId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const entryDetails = await response.json();
+
+        return entryDetails;
+      }
+    } catch (error) {
+      logger.warn('Could not fetch silo entry by id', { error });
+    }
+    return null;
+  }
+
   // Helper to build GOBL address
   static buildGoblAddress(addr: any): GoblAddress {
     return {
@@ -160,7 +180,11 @@ export class InvopopClient {
     taxCode: string,
     email: string,
     companyAddress: any,
-    personalAddress: any
+    personalAddress: any,
+    meta: {
+      user: string;
+      phone: string;
+    }
   ) {
     const addresses = [InvopopClient.buildGoblAddress(companyAddress)];
     const emails = [{ addr: email }];
@@ -177,6 +201,7 @@ export class InvopopClient {
           identities: [{ key: 'national', code: dni }],
           addresses: personalAddress ? [InvopopClient.buildGoblAddress(personalAddress)] : [],
         }],
+        meta
       };
     } else {
       return {
@@ -185,7 +210,104 @@ export class InvopopClient {
         tax_id: { country: 'ES', code: taxCode },
         addresses,
         emails,
+        meta
       };
     }
   }
+}
+
+export interface SupplierEntry {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  folder: string;
+  state: string;
+  draft: boolean;
+  env_schema: string;
+  doc_schema: string;
+  digest: Digest;
+  snippet: Snippet;
+  attachments: Attachment[];
+  data: EnvelopeData;
+  meta: MetaEntry[];
+}
+
+export interface Digest {
+  alg: string;
+  val: string;
+}
+
+export interface Snippet {
+  uuid: string;
+  name: string;
+  country: string;
+  tax_code: string;
+}
+
+export interface Attachment {
+  id: string;
+  entry_id: string;
+  created_at: string;
+  name: string;
+  hash: string;
+  mime: string;
+  size: number;
+  stored: boolean;
+  embeddable: boolean;
+  private: boolean;
+  meta: Record<string, string>;
+}
+
+export interface EnvelopeData {
+  $schema: string;
+  head: EnvelopeHead;
+  doc: PartyDocument;
+}
+
+export interface EnvelopeHead {
+  uuid: string;
+  dig: Digest;
+}
+
+export interface PartyDocument {
+  $schema: string;
+  uuid: string;
+  name: string;
+  tax_id: TaxId;
+  addresses: Address[];
+  emails: Email[];
+  meta: Record<string, string>;
+}
+
+export interface TaxId {
+  country: string;
+  code: string;
+}
+
+export interface Address {
+  num: string;
+  street: string;
+  locality: string;
+  region: string;
+  code: string;
+  country: string;
+}
+
+export interface Email {
+  addr: string;
+}
+
+export interface MetaEntry {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  owner_id: string;
+  entry_id: string;
+  src: string;
+  key: string;
+  ref: string;
+  link_url?: string;
+  link_scope?: string;
+  indexed?: boolean;
+  shared?: boolean;
 }
