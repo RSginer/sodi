@@ -54,15 +54,6 @@ export class InvopopClient {
     this.workflowId = config.workflowId || INVOPOP_WORKFLOW_ID || '';
   }
 
-  validateConfig() {
-    if (!this.apiToken || !this.workflowId) {
-      const missing = !this.apiToken ? 'INVOPOP_API_TOKEN' : 'INVOPOP_WORKFLOW_ID';
-      logger.error(`${missing} not configured`);
-      return { success: false, message: `Error de configuración: falta ${missing}` };
-    }
-    return { success: true };
-  }
-
   async createSiloEntry(goblParty: any): Promise<string> {
     const response = await fetch(`${this.apiBase}/silo/v1/entries`, {
       method: 'POST',

@@ -61,8 +61,6 @@ export const saveUserDataTool = createTool({
       };
     }
 
-
-
     let invopopData: any = profile?.invopop_data || {
       $schema: "https://gobl.org/draft-0/org/party",
       tax_id: { country: "ES" },
@@ -205,7 +203,7 @@ export const saveUserDataTool = createTool({
       .from('profiles')
       .update(updateData)
       .eq('id', profile.id)
-      .select('email, invopop_data')
+      .select('*')
       .single();
 
     if (error) {
@@ -216,6 +214,8 @@ export const saveUserDataTool = createTool({
       };
     }
 
+    context?.requestContext?.set('profile', updatedProfile);
+    
     logger.info("Profile updated successfully", {
       savedEmail: updatedProfile?.email,
       invopopEmail: (updatedProfile?.invopop_data as any)?.emails?.[0]?.addr
