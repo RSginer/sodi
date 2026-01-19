@@ -51,9 +51,9 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
 
 const handleMessage = async (c: Context, params: Record<string, string>) => {
-    try {
-        const threadId = params["WaId"];
+    const threadId = params["WaId"];
 
+    try {
         let profile = await UserService.getUserProfileByPhone(threadId);
 
         if (!profile) {
@@ -72,14 +72,22 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
         const requestContext = new RequestContext();
         requestContext.set('profile', profile);
 
-        const isVerifactuPending = profile.verifactu_status === 'processing';
+        const isVerifactuProcessing = profile.verifactu_status === 'processing';
+        const isVerifactuRegistered = profile.verifactu_status === 'registered';
 
-      
-        if (isVerifactuPending) {
+        if (isVerifactuProcessing) {
             return await twilio.messages.create({
                 from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
                 to: `whatsapp:+${threadId}`,
                 body: "Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro. " + profile.verifactu_link || "",
+            });
+        }
+
+        if (isVerifactuRegistered) {
+            return await twilio.messages.create({
+                from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+                to: `whatsapp:+${threadId}`,
+                body: "Ya hemos recibido tus datos para el registro de VERI*FACTU. Ahora están siendo verificados. Recibirás una notificación cuando el proceso esté completado.",
             });
         }
 
@@ -107,7 +115,7 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
 
         return await twilio.messages.create({
             from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
-            to: `whatsapp:+${params["WaId"]}`,
+            to: `whatsapp:+${threadId}`,
             body: "Lo siento, tuve un error técnico. Intenta más tarde.",
         });
     }
