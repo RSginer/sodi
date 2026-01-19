@@ -25,7 +25,7 @@ export const saveUserDataTool = createTool({
     // Person data
     firstName: z.string().optional().describe('Person first name'),
     lastName: z.string().optional().describe('Person last name'),
-    nif: z.string().optional().describe('NIF for self-employed (e.g., 123456789A)'),
+    nif: z.string().optional().describe('NIF for self-employed or in case of company, the NIF of the legal representative (e.g., 123456789A)'),
     
     // Company address
     companyAddressNumber: z.string().optional().describe('Company address number'),
@@ -117,6 +117,8 @@ export const saveUserDataTool = createTool({
       person.name.surname = inputData.lastName;
       savedFields.push('apellidos');
     }
+
+    logger.info("inputData", { inputData });
     if (inputData?.nif) {
       if (!person.identities) person.identities = [];
       person.identities = [{

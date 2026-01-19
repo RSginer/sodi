@@ -111,10 +111,18 @@ export const sendToVerifactuTool = createTool({
       logger.info('Job created', { jobId, siloEntryId });
 
       let registrationLink: string | undefined;
-      const verifactuLink = await invopopClient.getRegistrationLink(siloEntryId, resourceId);
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const verifactuLink = await invopopClient.getRegistrationLink(siloEntryId);
+
+      logger.info('Verifactu link', { verifactuLink });
 
       if (verifactuLink) {
         registrationLink = `${process.env.PUBLIC_URL}/verifactu?id=${resourceId}`;
+        
+        logger.info('Registration link', { registrationLink });
+
         await supabase
           .from('profiles')
           .update({ verifactu_link: verifactuLink, verifactu_status: 'processing' })

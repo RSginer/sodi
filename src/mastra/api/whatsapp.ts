@@ -42,11 +42,9 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
             return c.body(response.toString(), 200);
         }
 
-
-
         handleMessage(c, params);
 
-        return c.status(200);
+        return c.body(null,200);
     },
 });
 
@@ -87,7 +85,7 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
             return await twilio.messages.create({
                 from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
                 to: `whatsapp:+${threadId}`,
-                body: "Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro.",
+                body: "Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro. " + profile.verifactu_link || "",
             });
         }
 

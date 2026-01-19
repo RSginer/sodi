@@ -115,7 +115,7 @@ export class InvopopClient {
     return jobData.id;
   }
 
-  async getRegistrationLink(siloEntryId: string, resourceId: string): Promise<string | undefined> {
+  async getRegistrationLink(siloEntryId: string): Promise<string | undefined> {
     try {
       const response = await fetch(`${this.apiBase}/silo/v1/entries/${siloEntryId}`, {
         method: 'GET',
