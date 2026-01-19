@@ -9,7 +9,6 @@ import {
     validateRequest
 } from "../twilio";
 
-import { GoblParty } from "../invopop/invopop-client";
 import { Context } from "hono";
 
 const logger = new PinoLogger({
