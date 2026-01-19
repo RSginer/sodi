@@ -1,8 +1,15 @@
 import { registerApiRoute } from "@mastra/core/server";
 import { PinoLogger } from "@mastra/loggers";
 import { env } from "hono/adapter";
-import twilio from "twilio";
-import { supabase } from "../supabase";
+import UserService from "../services/user-service";
+import {
+    MessagingResponse,
+    twilio,
+    validateRequest
+} from "../twilio";
+
+import { GoblParty } from "../invopop/invopop-client";
+import { Context } from "hono";
 
 const logger = new PinoLogger({
     name: "WhatsappWebhook",
@@ -10,75 +17,62 @@ const logger = new PinoLogger({
 });
 
 
-const MessagingResponse = twilio.twiml.MessagingResponse;
+const parseFormData = async (c: Context): Promise<Record<string, string>> => {
+    const formData = await c.req.formData();
+    const params: Record<string, string> = {};
+    formData.forEach((value, key) => {
+        params[key] = value.toString();
+    });
+    return params;
+}
 
 export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
     method: "POST",
-    handler: async (c) => {
+    handler: async (c: Context) => {
         const authToken = env<{ TWILIO_AUTH_TOKEN: string }>(c).TWILIO_AUTH_TOKEN;
-
-        const formData = await c.req.formData();
-
-        const params: Record<string, string> = {};
-
-        formData.forEach((value, key) => {
-            params[key] = value.toString();
-        });
-
+        const params = await parseFormData(c);
         const twilioSignature = c.req.header("X-Twilio-Signature");
+        const url = new URL(c.req.url);
+        url.protocol = "https";
 
-        if (twilioSignature && authToken) {
-            const urlObj = new URL(c.req.url);
-            urlObj.protocol = "https:";
-            const publicUrl = urlObj.toString();
-            logger.info("Validating Twilio signature", { publicUrl, params });
-            const isValid = twilio.validateRequest(authToken, twilioSignature, publicUrl, params as Record<string, any>);
-
-            logger.info("Valid Twilio signature", { isValid });
-
-            if (!isValid) {
-                const response = new MessagingResponse();
-                response.message("No tienes permisos para acceder a este servicio.");
-                c.header("Content-Type", "text/xml");
-                return c.body(response.toString(), 200);
-            }
-
+        if (!validateRequest(authToken!, twilioSignature!, url.toString(), params as Record<string, any>)) {
+            const response = new MessagingResponse();
+            response.message("No tienes permisos para acceder a este servicio.");
+            c.header("Content-Type", "text/xml");
+            return c.body(response.toString(), 200);
         }
 
-        const messageBody = params["Body"] || "";
-        const channelMetadata = JSON.parse(params.ChannelMetadata) as {
-            type: string;
-            data: {
-                context: {
-                    ProfileName: string;
-                    WaId: string;
-                };
-            };
-        };
-        const from = `+${params["WaId"]}`;
+
+
+        handleMessage(c, params);
+
+        return c.status(200);
+    },
+});
+
+
+const handleMessage = async (c: Context, params: Record<string, string>) => {
+    try {
+        try {
+            await twilio.messaging.v2.typingIndicator.create({
+                channel: "whatsapp",
+                messageId: params["MessageSid"],
+            })
+        } catch (error) {
+            logger.warn("Error creating typing indicator", { error });
+        }
+
         const threadId = params["WaId"];
 
-        let { data: profile } = await supabase
-            .from('profiles')
-            .select('id, phone, invopop_data, name, email, verifactu_completed, verifactu_status, verifactu_link')
-            .eq('phone', params["WaId"])
-            .single();
+        let profile = await UserService.getUserProfileByPhone(threadId);
 
         if (!profile) {
-            const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-                phone: from,
-                phone_confirm: true,
-                user_metadata: { source: 'whatsapp', channelMetadata: channelMetadata },
-            });
-
-            logger.info("Created user in Supabase Auth", { authUser, error: authError });
-
-            if (authError) return c.json({ error: authError.message }, 500);
-
-            profile = { id: authUser.user.id, phone: from, invopop_data: null, name: null, email: null, verifactu_completed: false, verifactu_status: null, verifactu_link: null };
+            profile = await UserService.createUserProfile(threadId, JSON.parse(params["ChannelMetadata"] || "{}"));
         }
 
-        const invopopData = profile.invopop_data as any;
+        logger.info("Profile found", { profile });
+
+        const invopopData = profile.invopop_data as GoblParty;
         const hasName = profile.name || (invopopData?.people?.[0]?.name?.given);
         const hasDNI = invopopData?.people?.[0]?.identities?.[0]?.code;
         const hasTaxCode = invopopData?.tax_id?.code;
@@ -89,54 +83,48 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
         const isUserRegistered = hasName && hasDNI && hasTaxCode && hasAddress && hasEmail && hasVerifactuCompleted;
 
-        try {
-
-            if (isVerifactuPending) {
-                const response = new MessagingResponse();
-                
-                response.message("Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro.");
-                response.message(process.env.PUBLIC_URL + "/verifactu?id=" + profile.id);
-                
-                return c.body(response.toString(), 200, {
-                    "Content-Type": "text/xml",
-                });
-            }
-         
-
-            const agentName = isUserRegistered ? 'weatherAgent' : 'onboardingAgent';
-            const agent = c.var.mastra.getAgent(agentName);
-
-            logger.info("Using agent", {
-                agentName,
-                isUserRegistered,
-                hasName,
-                hasDNI,
-                hasTaxCode,
-                hasAddress
-            });
-
-            const result = await agent.generate(messageBody, {
-                threadId: threadId,
-                resourceId: profile.id
-            });
-
-            const aiResponse = result.text;
-     
-            const response = new MessagingResponse();
-            response.message(aiResponse);
-            return c.body(response.toString(), 200, {
-                "Content-Type": "text/xml",
-            });
-
-
-        } catch (error) {
-            logger.error("Error processing message", { error });
-
-            const response = new MessagingResponse();
-            response.message("Lo siento, tuve un error técnico. Intenta más tarde.");
-            return c.body(response.toString(), 200, {
-                "Content-Type": "text/xml",
+        if (isVerifactuPending) {
+            return await twilio.messages.create({
+                from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+                to: `whatsapp:+${threadId}`,
+                body: "Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro.",
             });
         }
-    },
-});
+
+
+        const agentName = isUserRegistered ? 'weatherAgent' : 'onboardingAgent';
+        const agent = c.var.mastra.getAgent(agentName);
+
+        logger.info("Using agent", {
+            agentName,
+            isUserRegistered,
+            hasName,
+            hasDNI,
+            hasTaxCode,
+            hasAddress
+        });
+
+        const result = await agent.generate(params["Body"] || "", {
+            threadId: threadId,
+            resourceId: profile.id
+        });
+
+        const aiResponse = result.text;
+
+        return await twilio.messages.create({
+            from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+            to: `whatsapp:+${threadId}`,
+            body: aiResponse,
+        });
+
+
+    } catch (error) {
+        logger.error("Error processing message", { error: error instanceof Error ? error.message : "Unknown error" });
+
+        return await twilio.messages.create({
+            from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+            to: `whatsapp:+${params["WaId"]}`,
+            body: "Lo siento, tuve un error técnico. Intenta más tarde.",
+        });
+    }
+}
