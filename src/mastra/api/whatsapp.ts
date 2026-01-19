@@ -2,6 +2,7 @@ import { registerApiRoute } from "@mastra/core/server";
 import { PinoLogger } from "@mastra/loggers";
 import { env } from "hono/adapter";
 import UserService from "../services/user-service";
+import { RequestContext } from "@mastra/core/request-context";
 import {
     MessagingResponse,
     twilio,
@@ -42,9 +43,9 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
             return c.body(response.toString(), 200);
         }
 
-        handleMessage(c, params);
+        void handleMessage(c, params);
 
-        return c.body(null,200);
+        return c.body(null, 200);
     },
 });
 
@@ -68,7 +69,12 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
             profile = await UserService.createUserProfile(threadId, JSON.parse(params["ChannelMetadata"] || "{}"));
         }
 
-        logger.info("Profile found", { profile });
+        const requestContext = new RequestContext();
+
+        requestContext.set('profile', profile);
+        requestContext.set('threadId', threadId);
+        requestContext.set('params', params);
+
 
         const invopopData = profile.invopop_data as GoblParty;
         const hasName = profile.name || (invopopData?.people?.[0]?.name?.given);
@@ -103,8 +109,11 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
         });
 
         const result = await agent.generate(params["Body"] || "", {
-            threadId: threadId,
-            resourceId: profile.id
+            requestContext: requestContext,
+            memory: {
+                thread: threadId,
+                resource: profile.id
+            }
         });
 
         const aiResponse = result.text;
