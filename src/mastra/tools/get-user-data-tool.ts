@@ -1,7 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { parseMemoryRequestContext } from '@mastra/core/memory';
-import { supabase } from '../supabase';
+import { UserProfile } from '../types/UserProfile';
 import { PinoLogger } from '@mastra/loggers';
 
 const logger = new PinoLogger({
@@ -14,9 +13,6 @@ export const getUserDataTool = createTool({
   description: `Retrieves the current user's registration data from the system.
   Use this tool to check what information has already been collected and what is still missing.
   This helps you avoid asking for information the user has already provided.`,
-  inputSchema: z.object({
-    // No input needed - uses resourceId from context
-  }),
   outputSchema: z.object({
     success: z.boolean(),
     userType: z.enum(['autonomo', 'empresa']).nullable().optional().describe('User type: autonomo (self-employed) or empresa (company)'),
@@ -53,34 +49,8 @@ export const getUserDataTool = createTool({
     }).optional(),
     message: z.string().optional(),
   }),
-  execute: async (inputData, context) => {
-    const memoryContext = parseMemoryRequestContext(context?.requestContext);
-    const resourceId = memoryContext?.resourceId;
-    
-    if (!resourceId) {
-      return {
-        success: false,
-        hasData: false,
-        message: 'No se pudo identificar al usuario',
-      };
-    }
-
-    try {
-      // Get user data from Supabase
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('user_type, name, cif, email, invopop_data')
-        .eq('id', resourceId)
-        .single();
-
-      if (error) {
-        logger.error("Error fetching user data", { error });
-        return {
-          success: false,
-          hasData: false,
-          message: `Error al obtener datos: ${error.message}`,
-        };
-      }
+  execute: async (_, context) => {
+    const profile = context?.requestContext?.get('profile') as UserProfile;
 
       if (!profile) {
         return {
@@ -101,7 +71,7 @@ export const getUserDataTool = createTool({
       const dni = person?.identities?.[0]?.code || null;
       
       // Extract tax codes
-      const taxCode = invopopData?.tax_id?.code || profile.cif || null;
+      const taxCode = invopopData?.tax_id?.code || null;
       const nif = userType === 'autonomo' ? taxCode : null;
       const cif = userType === 'empresa' ? taxCode : null;
       
@@ -166,13 +136,5 @@ export const getUserDataTool = createTool({
           ? `Datos encontrados. Faltan: ${missingFields.length > 0 ? missingFields.join(', ') : 'ninguno'}`
           : 'No hay datos guardados aún',
       };
-    } catch (error) {
-      logger.error("Exception fetching user data", { error });
-      return {
-        success: false,
-        hasData: false,
-        message: `Error inesperado: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
-    }
   },
 });

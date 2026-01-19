@@ -1,14 +1,14 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { parseMemoryRequestContext } from '@mastra/core/memory';
 import { supabase } from '../supabase';
 import { PinoLogger } from '@mastra/loggers';
+import { UserProfile } from '../types/UserProfile';
 
 const logger = new PinoLogger({
-    name: 'SaveUserDataTool',
-    level: 'info',
-  })
-  
+  name: 'SaveUserDataTool',
+  level: 'info',
+})
+
 export const saveUserDataTool = createTool({
   id: 'save-user-data',
   description: `Saves user data in invopop format for system registration.
@@ -17,30 +17,30 @@ export const saveUserDataTool = createTool({
   inputSchema: z.object({
     // User type
     userType: z.enum(['autonomo', 'empresa']).optional().describe('User type: autonomo (self-employed) or empresa (company)'),
-    
+
     // Company data
     companyName: z.string().optional().describe('Company name or business name'),
     cif: z.string().optional().describe('CIF for companies (e.g., B85905495)'),
-    
+
     // Person data
     firstName: z.string().optional().describe('Person first name'),
     lastName: z.string().optional().describe('Person last name'),
     nif: z.string().optional().describe('NIF for self-employed or in case of company, the NIF of the legal representative (e.g., 123456789A)'),
-    
+
     // Company address
     companyAddressNumber: z.string().optional().describe('Company address number'),
     companyAddressStreet: z.string().optional().describe('Company address street'),
     companyAddressCity: z.string().optional().describe('Company address city'),
     companyAddressProvince: z.string().optional().describe('Company address province'),
     companyAddressPostalCode: z.string().optional().describe('Company address postal code'),
-    
+
     // Personal address
     personalAddressNumber: z.string().optional().describe('Personal address number'),
     personalAddressStreet: z.string().optional().describe('Personal address street'),
     personalAddressCity: z.string().optional().describe('Personal address city'),
     personalAddressProvince: z.string().optional().describe('Personal address province'),
     personalAddressPostalCode: z.string().optional().describe('Personal address postal code'),
-    
+
     // Email
     email: z.string().email().optional().describe('Contact/billing email'),
   }),
@@ -50,22 +50,18 @@ export const saveUserDataTool = createTool({
     savedFields: z.array(z.string()).optional(),
   }),
   execute: async (inputData, context) => {
-    const memoryContext = parseMemoryRequestContext(context?.requestContext);
-    const resourceId = memoryContext?.resourceId;
-    
-    if (!resourceId) {
+    const profile = context?.requestContext?.get('profile') as UserProfile;
+
+    if (!profile) {
       return {
-        success: false,
-        message: 'No se pudo identificar al usuario',
+        success: true,
+        hasData: false,
+        userType: null,
+        message: 'Usuario no encontrado',
       };
     }
 
-    // Get existing data
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('user_type, invopop_data')
-      .eq('id', resourceId)
-      .single();
+
 
     let invopopData: any = profile?.invopop_data || {
       $schema: "https://gobl.org/draft-0/org/party",
@@ -104,7 +100,7 @@ export const saveUserDataTool = createTool({
     if (!invopopData.people || invopopData.people.length === 0) {
       invopopData.people = [{}];
     }
-    
+
     const person = invopopData.people[0];
 
     if (inputData?.firstName) {
@@ -160,16 +156,16 @@ export const saveUserDataTool = createTool({
     let emailToSave: string | undefined;
     if (inputData?.email) {
       const emailValue = inputData.email.trim();
-      logger.info("Saving email", { email: emailValue, resourceId });
-      
+      logger.info("Saving email", { email: emailValue });
+
       invopopData.emails = [{
         addr: emailValue,
       }];
       emailToSave = emailValue;
-      
+
       // Update email in Auth (non-blocking, log errors but don't fail)
       try {
-        const { error: authError } = await supabase.auth.admin.updateUserById(resourceId, {
+        const { error: authError } = await supabase.auth.admin.updateUserById(profile.id, {
           email: emailValue,
         });
         if (authError) {
@@ -180,7 +176,7 @@ export const saveUserDataTool = createTool({
       } catch (authErr) {
         logger.warn("Exception updating email in Auth", { error: authErr, email: emailValue });
       }
-      
+
       savedFields.push('email');
     }
 
@@ -191,24 +187,24 @@ export const saveUserDataTool = createTool({
       user_type: userType,
       name: `${person.name?.given} ${person.name?.surname}`,
     };
-    
+
     // Save tax code (CIF or NIF) in cif field for easy access
     if (invopopData.tax_id?.code) {
       updateData.cif = invopopData.tax_id.code;
     }
-    
+
     // Save email if provided
     if (emailToSave) {
       updateData.email = emailToSave;
       logger.info("Including email in update", { email: emailToSave });
     }
-    
-    logger.info("Updating profile", { resourceId, updateData: { ...updateData, invopop_data: '[...]' } });
-    
+
+    logger.info("Updating profile", { profileId: profile.id, updateData: { ...updateData, invopop_data: '[...]' } });
+
     const { error, data: updatedProfile } = await supabase
       .from('profiles')
       .update(updateData)
-      .eq('id', resourceId)
+      .eq('id', profile.id)
       .select('email, invopop_data')
       .single();
 
@@ -219,10 +215,10 @@ export const saveUserDataTool = createTool({
         message: `Error al guardar: ${error.message}`,
       };
     }
-    
-    logger.info("Profile updated successfully", { 
-      savedEmail: updatedProfile?.email, 
-      invopopEmail: (updatedProfile?.invopop_data as any)?.emails?.[0]?.addr 
+
+    logger.info("Profile updated successfully", {
+      savedEmail: updatedProfile?.email,
+      invopopEmail: (updatedProfile?.invopop_data as any)?.emails?.[0]?.addr
     });
 
     return {

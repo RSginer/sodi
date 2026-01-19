@@ -70,7 +70,7 @@ export const onboardingAgent = new Agent({
   tools: { saveUserDataTool, getUserDataTool, sendToVerifactuTool },
   memory: new Memory({
     options: {
-      lastMessages: 100,
+      lastMessages: 10,
     },
     storage: new PostgresStore({
       id: 'onboarding-agent-storage',

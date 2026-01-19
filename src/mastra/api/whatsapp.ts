@@ -52,6 +52,14 @@ export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
 
 const handleMessage = async (c: Context, params: Record<string, string>) => {
     try {
+        const threadId = params["WaId"];
+
+        let profile = await UserService.getUserProfileByPhone(threadId);
+
+        if (!profile) {
+            profile = await UserService.createUserProfile(threadId, JSON.parse(params["ChannelMetadata"] || "{}"));
+        }
+
         try {
             await twilio.messaging.v2.typingIndicator.create({
                 channel: "whatsapp",
@@ -61,32 +69,12 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
             logger.warn("Error creating typing indicator", { error });
         }
 
-        const threadId = params["WaId"];
-
-        let profile = await UserService.getUserProfileByPhone(threadId);
-
-        if (!profile) {
-            profile = await UserService.createUserProfile(threadId, JSON.parse(params["ChannelMetadata"] || "{}"));
-        }
-
         const requestContext = new RequestContext();
-
         requestContext.set('profile', profile);
-        requestContext.set('threadId', threadId);
-        requestContext.set('params', params);
 
-
-        const invopopData = profile.invopop_data as GoblParty;
-        const hasName = profile.name || (invopopData?.people?.[0]?.name?.given);
-        const hasDNI = invopopData?.people?.[0]?.identities?.[0]?.code;
-        const hasTaxCode = invopopData?.tax_id?.code;
-        const hasAddress = invopopData?.addresses?.[0]?.street;
-        const hasEmail = profile.email || invopopData?.emails?.[0]?.addr;
-        const hasVerifactuCompleted = profile.verifactu_completed;
         const isVerifactuPending = profile.verifactu_status === 'processing';
 
-        const isUserRegistered = hasName && hasDNI && hasTaxCode && hasAddress && hasEmail && hasVerifactuCompleted;
-
+      
         if (isVerifactuPending) {
             return await twilio.messages.create({
                 from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
@@ -95,18 +83,7 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
             });
         }
 
-
-        const agentName = isUserRegistered ? 'weatherAgent' : 'onboardingAgent';
-        const agent = c.var.mastra.getAgent(agentName);
-
-        logger.info("Using agent", {
-            agentName,
-            isUserRegistered,
-            hasName,
-            hasDNI,
-            hasTaxCode,
-            hasAddress
-        });
+        const agent = c.var.mastra.getAgent("onboardingAgent");
 
         const result = await agent.generate(params["Body"] || "", {
             requestContext: requestContext,
