@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { UserProfile } from '../types/UserProfile';
 import { PinoLogger } from '@mastra/loggers';
+import { GoblParty } from '../invopop/invopop-client';
 
 const logger = new PinoLogger({
   name: 'GetUserDataTool',
@@ -61,7 +62,7 @@ export const getUserDataTool = createTool({
         };
       }
 
-      const invopopData = profile.invopop_data as any;
+      const invopopData = profile.invopop_data as GoblParty;
       const userType = profile.user_type as 'autonomo' | 'empresa' | null;
 
       // Extract person data

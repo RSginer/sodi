@@ -205,6 +205,7 @@ export class InvopopClient {
       };
     }
   }
+
 }
 
 export interface SupplierEntry {
