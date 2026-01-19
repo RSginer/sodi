@@ -28,7 +28,7 @@ export const invopopVerifactuWebhook = registerApiRoute("/invopop/verifactu/webh
         }
 
         const { data: profile, error: profileError } = await supabase.from('profiles')
-            .select('id, name, email, phone, invopop_data, verifactu_completed, verifactu_status').eq('id', profileId).single();
+            .select('id, name, email, phone, invopop_data, verifactu_completed, verifactu_status').eq('id', profileId).maybeSingle();
 
         if (profileError) {
             return c.json({ error: profileError.message }, 500);
