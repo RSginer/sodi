@@ -38,6 +38,7 @@ const createUserProfile = async (phone: string, channelMetadata: any): Promise<U
         id: authUser.user.id,
         phone: phone,
         invopop_data: null,
+        user_type: null,
         name: null,
         email: null,
         verifactu_completed: false,
