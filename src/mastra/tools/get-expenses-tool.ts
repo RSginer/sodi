@@ -12,16 +12,28 @@ const logger = new PinoLogger({
 export const getExpensesTool = createTool({
   id: 'get-expenses',
   description: `Obtiene la lista de gastos (tickets/facturas) registrados del usuario desde la tabla expenses_invoices.
-  Usa esta tool cuando el usuario quiera ver, revisar o resumir sus gastos ya registrados.`,
-  inputSchema: z.object({
-    limit: z
-      .number()
-      .int()
-      .positive()
-      .max(100)
-      .default(20)
-      .describe('Número máximo de gastos a devolver, ordenados del más reciente al más antiguo'),
-  }).optional(),
+  Usa esta tool cuando el usuario quiera ver, revisar o resumir sus gastos ya registrados.
+  También puedes pasar un rango de fechas (fromDate, toDate) en formato YYYY-MM-DD para filtrar por la fecha de la factura (issue_date),
+  por ejemplo "este mes" o "entre dos fechas".`,
+  inputSchema: z
+    .object({
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(100)
+        .default(20)
+        .describe('Número máximo de gastos a devolver, ordenados del más reciente al más antiguo'),
+      fromDate: z
+        .string()
+        .optional()
+        .describe('Fecha de inicio (incluida) del rango en formato YYYY-MM-DD, aplicada sobre la fecha de la factura (issue_date)'),
+      toDate: z
+        .string()
+        .optional()
+        .describe('Fecha de fin (incluida) del rango en formato YYYY-MM-DD, aplicada sobre la fecha de la factura (issue_date)'),
+    })
+    .optional(),
   outputSchema: z.object({
     success: z.boolean(),
     message: z.string(),
@@ -73,12 +85,26 @@ export const getExpensesTool = createTool({
     }
 
     const limit = input?.limit ?? 20;
+    const fromDate = input?.fromDate;
+    const toDate = input?.toDate;
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('expenses_invoices')
         .select('id, created_at, gobl_invoice, iva_rate_percent')
-        .eq('profile_id', profile.id)
+        .eq('profile_id', profile.id);
+
+      if (fromDate) {
+        // Filtramos por la fecha de la factura (issue_date) almacenada en el JSON gobl_invoice
+        // Usamos la expresión de columna JSON ->> para compararla como texto YYYY-MM-DD
+        query = query.gte('gobl_invoice->>issue_date', fromDate);
+      }
+
+      if (toDate) {
+        query = query.lte('gobl_invoice->>issue_date', toDate);
+      }
+
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(limit);
 
