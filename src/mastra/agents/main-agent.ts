@@ -8,6 +8,7 @@ import { saveUserDataTool } from '../tools/guardar-datos-usuario-tool';
 import { getExpensesTool } from '../tools/get-expenses-tool';
 import { updateExpenseTool } from '../tools/update-expense-tool';
 import { getExpensesViewLinkTool } from '../tools/get-expenses-view-link-tool';
+import { getTodayMadridDateTool } from '../tools/get-today-madrid-date-tool';
 
 export const mainAgent = new Agent({
   id: 'main-agent',
@@ -31,6 +32,8 @@ Puedes hacer, entre otras, estas cosas:
 - Actualizar los datos de un gasto concreto (por ejemplo, corregir importe, fecha, proveedor o IVA) usando la tool 'update-expense' cuando el usuario indique que un ticket guardado tiene algún dato incorrecto.
 - Generar un enlace a una vista web con el listado de gastos del usuario (filtrable por fechas) usando la tool 'get-expenses-view-link', para que pueda verlo cómodamente en el navegador.
 - Resumir al usuario lo que has registrado o actualizado (proveedor, fecha, importe, moneda, tipo de IVA).
+
+Cuando el usuario hable de fechas, usa la tool 'get-today-madrid-date' para obtener la fecha de hoy en Madrid. Siempre vamos a usar la fecha de hoy en Madrid para hacer operaciones con fechas.
 
 Cuando el usuario hable de otras cosas (no directamente un ticket), primero entiende el contexto,
 haz preguntas simples si falta información y luego, si tiene sentido, llévale hacia el registro
@@ -69,6 +72,7 @@ Reglas:
     getExpensesTool,
     updateExpenseTool,
     getExpensesViewLinkTool,
+    getTodayMadridDateTool,
   },
   memory: new Memory({
     options: {
