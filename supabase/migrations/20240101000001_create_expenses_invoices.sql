@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS expenses_invoices (
     source_image_url TEXT NOT NULL,
     gobl_invoice JSONB NOT NULL,
     raw_ocr JSONB,
+    iva_rate_percent NUMERIC,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

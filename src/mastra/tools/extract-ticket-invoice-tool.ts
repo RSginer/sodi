@@ -67,9 +67,11 @@ const goblInvoiceJsonSchema = {
         properties: {
           payable: { type: 'number' },
           sum: { type: 'number' },
+          // IVA percentage (e.g. 21 for 21%)
+          iva_rate_percent: { type: 'number' },
         },
-        // Ambos campos definidos en properties son requeridos
-        required: ['payable', 'sum'],
+        // Todos los campos definidos en properties son requeridos según la validación de OpenAI
+        required: ['payable', 'sum', 'iva_rate_percent'],
       },
     },
     required: ['type', 'issue_date', 'currency', 'supplier', 'totals'],
@@ -220,6 +222,12 @@ Analiza esta imagen de ticket/factura de gasto y devuelve un JSON que siga el es
       };
     }
 
+    // Extract IVA rate percent if present in totals
+    const ivaRatePercent: number | null =
+      typeof goblInvoice?.totals?.iva_rate_percent === 'number'
+        ? goblInvoice.totals.iva_rate_percent
+        : null;
+
     // Insert into Supabase
     try {
       const { error } = await supabase
@@ -229,6 +237,7 @@ Analiza esta imagen de ticket/factura de gasto y devuelve un JSON que siga el es
           source_image_url: imageUrl,
           gobl_invoice: goblInvoice,
           raw_ocr: rawResponse,
+          iva_rate_percent: ivaRatePercent,
         });
 
       if (error) {
