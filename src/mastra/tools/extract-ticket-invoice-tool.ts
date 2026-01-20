@@ -153,6 +153,8 @@ Reglas IMPORTANTES:
   - currency (por defecto \"EUR\" si está en España y no se indica otra)
   - supplier (con al menos name y, si es posible, tax_id.code)
   - totals (con al menos total y tax breakdown si se ve)
+  - iva_rate_percent (tipo de IVA aplicado al ticket en porcentaje, por ejemplo 21 para 21%)
+  
 - Devuelve SOLO el objeto JSON, sin texto adicional alrededor.
 `.trim();
 
