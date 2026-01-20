@@ -99,18 +99,28 @@ export const sendToVerifactuTool = createTool({
 
     logger.info('Verifactu link', { verifactuLink });
 
+    // Save silo_entry_id to profiles
+    const updateData: any = {
+      invopop_silo_entry_id: siloEntryId,
+    };
+
     if (verifactuLink) {
       registrationLink = `${process.env.PUBLIC_URL}/verifactu?id=${profile.id}`;
-
       logger.info('Registration link', { registrationLink });
-
-      await supabase
-        .from('profiles')
-        .update({ verifactu_link: verifactuLink, verifactu_status: 'processing' })
-        .eq('id', profile.id);
-
-      context?.requestContext?.set('profile', { ...profile, verifactu_link: verifactuLink, verifactu_status: 'processing' });
+      updateData.verifactu_link = verifactuLink;
+      updateData.verifactu_status = 'processing';
     }
+
+    await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', profile.id);
+
+    context?.requestContext?.set('profile', {
+      ...profile,
+      invopop_silo_entry_id: siloEntryId,
+      ...(verifactuLink && { verifactu_link: verifactuLink, verifactu_status: 'processing' }),
+    });
 
     return {
       success: true,

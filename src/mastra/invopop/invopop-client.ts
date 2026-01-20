@@ -149,6 +149,30 @@ export class InvopopClient {
     return null;
   }
 
+  async updateSiloEntry(siloEntryId: string, goblParty: any): Promise<void> {
+    const response = await fetch(`${this.apiBase}/silo/v1/entries/${siloEntryId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${this.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content_type: 'application/json',
+        data: goblParty,
+        sign: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Error updating silo entry', {
+        status: response.status,
+        error: errorText
+      });
+      throw new Error(`Error al actualizar entrada en Invopop: ${response.status} - ${errorText}`);
+    }
+  }
+
   // Helper to build GOBL address
   static buildGoblAddress(addr: any): GoblAddress {
     return {

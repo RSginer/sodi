@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabase } from '../supabase';
 import { PinoLogger } from '@mastra/loggers';
 import { UserProfile } from '../types/UserProfile';
+import { InvopopClient } from '../invopop/invopop-client';
 
 const logger = new PinoLogger({
   name: 'SaveUserDataTool',
@@ -186,11 +187,6 @@ export const saveUserDataTool = createTool({
       name: `${person.name?.given} ${person.name?.surname}`,
     };
 
-    // Save tax code (CIF or NIF) in cif field for easy access
-    if (invopopData.tax_id?.code) {
-      updateData.cif = invopopData.tax_id.code;
-    }
-
     // Save email if provided
     if (emailToSave) {
       updateData.email = emailToSave;
@@ -215,6 +211,20 @@ export const saveUserDataTool = createTool({
     }
 
     context?.requestContext?.set('profile', updatedProfile);
+    
+    // Update Invopop silo entry if it exists
+    if (updatedProfile.invopop_silo_entry_id) {
+      try {
+        logger.info("Updating Invopop silo entry", { siloEntryId: updatedProfile.invopop_silo_entry_id });
+
+        const invopopClient = new InvopopClient();
+        await invopopClient.updateSiloEntry(updatedProfile.invopop_silo_entry_id, invopopData);
+        logger.info("Invopop silo entry updated successfully");
+      } catch (error) {
+        logger.error("Error updating Invopop silo entry", { error });
+        // Don't fail the whole operation if Invopop update fails
+      }
+    }
     
     logger.info("Profile updated successfully", {
       savedEmail: updatedProfile?.email,

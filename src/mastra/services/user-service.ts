@@ -43,7 +43,8 @@ const createUserProfile = async (phone: string, channelMetadata: any): Promise<U
         email: null,
         verifactu_completed: false,
         verifactu_status: null,
-        verifactu_link: null
+        verifactu_link: null,
+        invopop_silo_entry_id: null
     };
 
 }

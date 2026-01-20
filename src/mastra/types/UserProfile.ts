@@ -10,4 +10,5 @@ export interface UserProfile {
     verifactu_completed: boolean | null;
     verifactu_status: string | null;
     verifactu_link: string | null;
+    invopop_silo_entry_id: string | null;
 }
