@@ -7,13 +7,13 @@ import { whatsappWebhook } from './api/whatsapp';
 import { PostgresStore } from "@mastra/pg";
 import { onboardingAgent } from './agents/onboarding-agent';
 import { invopopVerifactuWebhook } from './api/invopop';
-import { expensesAgent } from './agents/expenses-agent';
+import { mainAgent } from './agents/main-agent';
 
 export const mastra = new Mastra({
   workflows: {  },
   agents: { 
     onboardingAgent,
-    expensesAgent,
+    mainAgent,
   },
   scorers: {  },
   storage: new PostgresStore({

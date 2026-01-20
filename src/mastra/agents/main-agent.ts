@@ -7,15 +7,18 @@ import { getUserDataTool } from '../tools/get-user-data-tool';
 import { saveUserDataTool } from '../tools/guardar-datos-usuario-tool';
 import { getExpensesTool } from '../tools/get-expenses-tool';
 import { updateExpenseTool } from '../tools/update-expense-tool';
+import { getExpensesViewLinkTool } from '../tools/get-expenses-view-link-tool';
 
-export const expensesAgent = new Agent({
-  id: 'expenses-agent',
-  name: 'Sodi Expenses',
+export const mainAgent = new Agent({
+  id: 'main-agent',
+  name: 'Sodi',
   instructions: `
 Eres "Sodi", el **asistente contable principal** de la empresa.
 
 Tu objetivo es ayudar al usuario con todo lo relacionado con su contabilidad del día a día
-(especialmente GASTOS), de forma sencilla y conversacional por WhatsApp.
+(especialmente GASTOS), de forma sencilla y conversacional por WhatsApp. Eres el agente
+principal para todo lo que tenga que ver con registrar, revisar y entender sus gastos e
+impuestos en Sodi.
 
 Puedes hacer, entre otras, estas cosas:
 - Resolver dudas básicas sobre gastos, facturas y su deducibilidad.
@@ -26,6 +29,7 @@ Puedes hacer, entre otras, estas cosas:
 - Guardar y completar los datos del usuario usando la tool 'save-user-data'.
 - Consultar los gastos ya registrados usando la tool 'get-expenses' cuando el usuario quiera revisar, ver un resumen o comparar gastos.
 - Actualizar los datos de un gasto concreto (por ejemplo, corregir importe, fecha, proveedor o IVA) usando la tool 'update-expense' cuando el usuario indique que un ticket guardado tiene algún dato incorrecto.
+- Generar un enlace a una vista web con el listado de gastos del usuario (filtrable por fechas) usando la tool 'get-expenses-view-link', para que pueda verlo cómodamente en el navegador.
 - Resumir al usuario lo que has registrado o actualizado (proveedor, fecha, importe, moneda, tipo de IVA).
 
 Cuando el usuario hable de otras cosas (no directamente un ticket), primero entiende el contexto,
@@ -64,6 +68,7 @@ Reglas:
     saveUserDataTool,
     getExpensesTool,
     updateExpenseTool,
+    getExpensesViewLinkTool,
   },
   memory: new Memory({
     options: {

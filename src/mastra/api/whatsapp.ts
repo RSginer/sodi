@@ -98,7 +98,7 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
 
         // Decide which agent to use
         // Simple deterministic routing: if there's an image, use expensesAgent; otherwise onboardingAgent
-        const targetAgentId = isVerifactuCompleted ? "expensesAgent" : "onboardingAgent";
+        const targetAgentId = isVerifactuCompleted ? "mainAgent" : "onboardingAgent";
         const agent = c.var.mastra.getAgent(targetAgentId);
 
         // Build input for the agent
