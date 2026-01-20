@@ -73,6 +73,7 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
 
         const isVerifactuProcessing = profile.verifactu_status === 'processing';
         const isVerifactuRegistered = profile.verifactu_status === 'registered';
+        const isVerifactuCompleted = profile.verifactu_status === 'completed';
 
         if (isVerifactuProcessing) {
             return await twilio.messages.create({
@@ -97,7 +98,7 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
 
         // Decide which agent to use
         // Simple deterministic routing: if there's an image, use expensesAgent; otherwise onboardingAgent
-        const targetAgentId = hasImage ? "expensesAgent" : "onboardingAgent";
+        const targetAgentId = isVerifactuCompleted ? "expensesAgent" : "onboardingAgent";
         const agent = c.var.mastra.getAgent(targetAgentId);
 
         // Build input for the agent
