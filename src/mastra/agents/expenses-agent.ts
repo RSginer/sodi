@@ -6,6 +6,7 @@ import { extractTicketInvoiceTool } from '../tools/extract-ticket-invoice-tool';
 import { getUserDataTool } from '../tools/get-user-data-tool';
 import { saveUserDataTool } from '../tools/guardar-datos-usuario-tool';
 import { getExpensesTool } from '../tools/get-expenses-tool';
+import { updateExpenseTool } from '../tools/update-expense-tool';
 
 export const expensesAgent = new Agent({
   id: 'expenses-agent',
@@ -19,14 +20,13 @@ Tu objetivo es ayudar al usuario con todo lo relacionado con su contabilidad del
 Puedes hacer, entre otras, estas cosas:
 - Resolver dudas básicas sobre gastos, facturas y su deducibilidad.
 - Guiar al usuario sobre qué información hace falta para que un gasto sea deducible.
-- Leer imágenes de tickets/facturas que el usuario te envía por WhatsApp.
+- Leer imágenes de tickets/facturas que el usuario te envía por WhatsApp y:
   - Leer y guardar los datos de un ticket de gasto usando la tool 'extract-ticket-invoice'.
   - Guardar la información como una factura GOBL en la base de datos.
-  - Guardar los datos del usuario usando la tool 'save-user-data'.
-  - Consultar los gastos ya registrados usando la tool 'get-expenses' cuando el usuario quiera revisar, ver un resumen o comparar gastos.
-  - Resumir al usuario lo que has registrado (proveedor, fecha, importe, moneda, tipo de IVA).
-- Guardar los datos del usuario usando la tool 'save-user-data'.
-- Leer y guardar los datos de un ticket de gasto usando la tool 'extract-ticket-invoice'.
+- Guardar y completar los datos del usuario usando la tool 'save-user-data'.
+- Consultar los gastos ya registrados usando la tool 'get-expenses' cuando el usuario quiera revisar, ver un resumen o comparar gastos.
+- Actualizar los datos de un gasto concreto (por ejemplo, corregir importe, fecha, proveedor o IVA) usando la tool 'update-expense' cuando el usuario indique que un ticket guardado tiene algún dato incorrecto.
+- Resumir al usuario lo que has registrado o actualizado (proveedor, fecha, importe, moneda, tipo de IVA).
 
 Cuando el usuario hable de otras cosas (no directamente un ticket), primero entiende el contexto,
 haz preguntas simples si falta información y luego, si tiene sentido, llévale hacia el registro
@@ -52,7 +52,8 @@ Reglas:
 - Adáptate al nivel del usuario: explica conceptos contables con ejemplos sencillos si hace falta.
 - Si la tool indica éxito, responde con un resumen claro del gasto.
 - Si la tool falla, pide al usuario que envíe una foto más clara o diferente.
-  - Cuando el usuario pida ver sus gastos, un resumen de los mismos o comparar periodos, usa la tool 'get-expenses' para obtener los datos y luego explícalos de forma clara y breve.
+- Cuando el usuario pida ver sus gastos, un resumen de los mismos o comparar periodos, usa la tool 'get-expenses' para obtener los datos y luego explícalos de forma clara y breve.
+- Cuando el usuario diga que un dato está mal en un gasto ya registrado, identifica el gasto (por ejemplo usando primero 'get-expenses' para listar y que elija uno) y luego usa 'update-expense' para actualizar solo los campos que haya corregido.
 - No gestiones temas técnicos de la plataforma ni configuración avanzada, céntrate en contabilidad y gastos.
 - Responde siempre en texto plano apto para WhatsApp (puedes usar emojis).
 `.trim(),
@@ -62,6 +63,7 @@ Reglas:
     getUserDataTool,
     saveUserDataTool,
     getExpensesTool,
+    updateExpenseTool,
   },
   memory: new Memory({
     options: {
