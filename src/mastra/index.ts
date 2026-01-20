@@ -6,14 +6,14 @@ import views from '../views';
 import { whatsappWebhook } from './api/whatsapp';
 import { PostgresStore } from "@mastra/pg";
 import { onboardingAgent } from './agents/onboarding-agent';
-import { weatherAgent } from './agents/weather-agent';
 import { invopopVerifactuWebhook } from './api/invopop';
+import { expensesAgent } from './agents/expenses-agent';
 
 export const mastra = new Mastra({
   workflows: {  },
   agents: { 
     onboardingAgent,
-    weatherAgent,
+    expensesAgent,
   },
   scorers: {  },
   storage: new PostgresStore({

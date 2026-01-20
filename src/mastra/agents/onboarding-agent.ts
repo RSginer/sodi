@@ -66,7 +66,7 @@ export const onboardingAgent = new Agent({
 
   ### FINALIZACIÓN
   Cuando tengas al menos: tipo de usuario, email, nombre, DNI, NIF/CIF y dirección fiscal, usa la tool 'send-to-verifactu' para registrar al proveedor y comenzar el proceso de registro de VERI*FACTU.`,
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-4.1-nano',
   tools: { saveUserDataTool, getUserDataTool, sendToVerifactuTool },
   memory: new Memory({
     options: {

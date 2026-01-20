@@ -90,9 +90,26 @@ const handleMessage = async (c: Context, params: Record<string, string>) => {
             });
         }
 
-        const agent = c.var.mastra.getAgent("onboardingAgent");
+        // Determine if the message contains an image (ticket)
+        const numMedia = parseInt(params["NumMedia"] || "0", 10);
+        const hasImage = numMedia > 0 && (params["MediaContentType0"] || "").startsWith("image/");
+        const bodyText = params["Body"] || "";
 
-        const result = await agent.generate(params["Body"] || "", {
+        // Decide which agent to use
+        // Simple deterministic routing: if there's an image, use expensesAgent; otherwise onboardingAgent
+        const targetAgentId = hasImage ? "expensesAgent" : "onboardingAgent";
+        const agent = c.var.mastra.getAgent(targetAgentId);
+
+        // Build input for the agent
+        let agentInput: string | Record<string, any> = bodyText;
+        if (hasImage) {
+            const imageUrl = params["MediaUrl0"];
+            agentInput = bodyText
+                ? `Mensaje del usuario: "${bodyText}". URL de la imagen del ticket: ${imageUrl}`
+                : `URL de la imagen del ticket: ${imageUrl}`;
+        }
+
+        const result = await agent.generate(agentInput, {
             requestContext: requestContext,
             memory: {
                 thread: threadId,
