@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabase } from '../supabase';
 import { PinoLogger } from '@mastra/loggers';
 import { UserProfile } from '../types/UserProfile';
+import { GoblInvoiceSchema } from './extract-ticket-invoice-tool';
 
 const logger = new PinoLogger({
   name: 'GetExpensesTool',
@@ -44,6 +45,14 @@ export const getExpensesTool = createTool({
           createdAt: z
             .string()
             .describe('Fecha de creación del registro en la base de datos (ISO 8601)'),
+          goblInvoice: GoblInvoiceSchema.nullable().describe(
+            'Objeto factura GOBL completo tal y como está guardado en la base de datos.',
+          ),
+          sourceImageUrl: z
+            .string()
+            .nullable()
+            .optional()
+            .describe('URL de la imagen original del ticket/factura, si está disponible.'),
           supplierName: z
             .string()
             .nullable()
@@ -63,7 +72,7 @@ export const getExpensesTool = createTool({
             .number()
             .nullable()
             .optional()
-            .describe('Importe total pagado si está disponible')
+            .describe('Importe total pagado si está disponible'),
         }),
       )
       .describe('Lista de gastos del usuario'),
@@ -86,7 +95,7 @@ export const getExpensesTool = createTool({
     try {
       let query = supabase
         .from('expenses_invoices')
-        .select('id, created_at, gobl_invoice')
+        .select('id, created_at, gobl_invoice, source_image_url')
         .eq('profile_id', profile.id);
 
       if (fromDate) {
@@ -115,37 +124,45 @@ export const getExpensesTool = createTool({
       const expenses =
         data?.map((row: any) => {
           const invoice = row.gobl_invoice || {};
+          const supplier = invoice?.supplier || {};
 
           const supplierName =
-            invoice?.supplier?.name ??
-            invoice?.supplier?.party?.name ??
+            (supplier.name as string | undefined) ??
+            (supplier.party?.name as string | undefined) ??
             null;
 
-          const issueDate = invoice?.issue_date ?? null;
-          const currency = invoice?.currency ?? null;
+          const issueDate = (invoice?.issue_date as string | undefined) ?? null;
+          const currency = (invoice?.currency as string | undefined) ?? null;
 
+          // Total importe: usamos payable, luego total_with_tax, luego sum (todas strings según GOBL)
           let totalAmount: number | null = null;
-          if (typeof invoice?.totals?.payable === 'number') {
-            totalAmount = invoice.totals.payable;
-          } else if (typeof invoice?.totals?.sum === 'number') {
-            totalAmount = invoice.totals.sum;
+          const totals = invoice?.totals;
+          if (totals) {
+            if (typeof totals.payable === 'string') {
+              totalAmount = parseFloat(totals.payable);
+            } else if (typeof totals.payable === 'number') {
+              totalAmount = totals.payable;
+            } else if (typeof totals.total_with_tax === 'string') {
+              totalAmount = parseFloat(totals.total_with_tax);
+            } else if (typeof totals.total_with_tax === 'number') {
+              totalAmount = totals.total_with_tax;
+            } else if (typeof totals.sum === 'string') {
+              totalAmount = parseFloat(totals.sum);
+            } else if (typeof totals.sum === 'number') {
+              totalAmount = totals.sum;
+            }
           }
 
-          const ivaRatePercent =
-            typeof row.iva_rate_percent === 'number'
-              ? row.iva_rate_percent
-              : typeof invoice?.totals?.iva_rate_percent === 'number'
-                ? invoice.totals.iva_rate_percent
-                : null;
 
           return {
             id: row.id as string,
             createdAt: row.created_at as string,
+            goblInvoice: invoice,
+            sourceImageUrl: (row.source_image_url as string | undefined) ?? null,
             supplierName,
             issueDate,
             currency,
             totalAmount,
-            ivaRatePercent,
           };
         }) ?? [];
 

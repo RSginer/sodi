@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabase } from '../supabase';
 import { PinoLogger } from '@mastra/loggers';
 import { UserProfile } from '../types/UserProfile';
+import { GoblInvoiceSchema } from './extract-ticket-invoice-tool';
 
 const logger = new PinoLogger({
   name: 'UpdateExpenseTool',
@@ -18,6 +19,7 @@ export const updateExpenseTool = createTool({
       .string()
       .uuid()
       .describe('ID del gasto (registro de expenses_invoices) que se quiere actualizar'),
+    // Atajo para campos frecuentes (mantener compatibilidad)
     issueDate: z
       .string()
       .optional()
@@ -42,6 +44,12 @@ export const updateExpenseTool = createTool({
       .number()
       .optional()
       .describe('Nuevo tipo de IVA aplicado al gasto, en porcentaje (por ejemplo, 21 para 21%)'),
+    // Permite actualizar cualquier campo del objeto GOBL completo
+    goblInvoice: GoblInvoiceSchema.partial()
+      .optional()
+      .describe(
+        'Objeto factura GOBL parcial o completo con los campos a sobrescribir dentro de gobl_invoice.',
+      ),
   }),
   outputSchema: z.object({
     success: z.boolean(),
@@ -104,10 +112,41 @@ export const updateExpenseTool = createTool({
         };
       }
 
-      const invoice = (existing as any).gobl_invoice || {};
+      let invoice = (existing as any).gobl_invoice || {};
       const updatedFields: string[] = [];
 
       // 2. Aplicar cambios sobre el JSON de la factura
+      // 2. Si se pasa un objeto goblInvoice, hacemos un merge profundo sobre el existente
+      if (input.goblInvoice) {
+        // Validamos/parcheamos solo los campos permitidos por el esquema GOBL
+        const patch = GoblInvoiceSchema.partial().parse(input.goblInvoice);
+
+        const deepMerge = (target: any, source: any): any => {
+          if (source === null || source === undefined) return target;
+          if (typeof source !== 'object' || Array.isArray(source)) {
+            return source;
+          }
+          if (typeof target !== 'object' || Array.isArray(target)) {
+            target = {};
+          }
+          for (const key of Object.keys(source)) {
+            const value = (source as any)[key];
+            if (Array.isArray(value)) {
+              (target as any)[key] = value;
+            } else if (value && typeof value === 'object') {
+              (target as any)[key] = deepMerge((target as any)[key], value);
+            } else {
+              (target as any)[key] = value;
+            }
+          }
+          return target;
+        };
+
+        invoice = deepMerge(invoice, patch);
+        updatedFields.push('goblInvoice');
+      }
+
+      // 3. Aplicar cambios de los atajos sobre el JSON de la factura
       if (issueDate) {
         (invoice as any).issue_date = issueDate;
         updatedFields.push('issueDate');
@@ -144,7 +183,8 @@ export const updateExpenseTool = createTool({
         if (!(invoice as any).totals) {
           (invoice as any).totals = {};
         }
-        (invoice as any).totals.payable = totalAmount;
+        // GOBL usa strings para importes monetarios
+        (invoice as any).totals.payable = totalAmount.toFixed(2);
         updatedFields.push('totalAmount');
       }
 
@@ -153,7 +193,36 @@ export const updateExpenseTool = createTool({
         if (!(invoice as any).totals) {
           (invoice as any).totals = {};
         }
-        (invoice as any).totals.iva_rate_percent = ivaRatePercent;
+        // Intentamos actualizar la primera categoría/tasa de IVA según el esquema GOBL
+        const totals = (invoice as any).totals;
+        if (!totals.taxes) {
+          totals.taxes = {};
+        }
+        if (!Array.isArray(totals.taxes.categories)) {
+          totals.taxes.categories = [];
+        }
+        if (!totals.taxes.categories[0]) {
+          totals.taxes.categories[0] = {
+            code: 'VAT',
+            rates: [],
+            base: '0',
+            amount: '0',
+          };
+        }
+        const firstCategory = totals.taxes.categories[0];
+        if (!Array.isArray(firstCategory.rates)) {
+          firstCategory.rates = [];
+        }
+        if (!firstCategory.rates[0]) {
+          firstCategory.rates[0] = {
+            key: 'standard',
+            base: '0',
+            percent: '',
+            amount: '0',
+          };
+        }
+        firstCategory.rates[0].percent = `${ivaRatePercent}%`;
+
         newIvaRatePercent = ivaRatePercent;
         updatedFields.push('ivaRatePercent');
       } else if (typeof (existing as any).iva_rate_percent === 'number') {
@@ -198,18 +267,32 @@ export const updateExpenseTool = createTool({
       const finalCurrency = updatedInvoice?.currency ?? null;
 
       let finalTotalAmount: number | null = null;
-      if (typeof updatedInvoice?.totals?.payable === 'number') {
+      if (typeof updatedInvoice?.totals?.payable === 'string') {
+        finalTotalAmount = parseFloat(updatedInvoice.totals.payable);
+      } else if (typeof updatedInvoice?.totals?.payable === 'number') {
         finalTotalAmount = updatedInvoice.totals.payable;
+      } else if (typeof updatedInvoice?.totals?.total_with_tax === 'string') {
+        finalTotalAmount = parseFloat(updatedInvoice.totals.total_with_tax);
+      } else if (typeof updatedInvoice?.totals?.total_with_tax === 'number') {
+        finalTotalAmount = updatedInvoice.totals.total_with_tax;
+      } else if (typeof updatedInvoice?.totals?.sum === 'string') {
+        finalTotalAmount = parseFloat(updatedInvoice.totals.sum);
       } else if (typeof updatedInvoice?.totals?.sum === 'number') {
         finalTotalAmount = updatedInvoice.totals.sum;
       }
 
-      const finalIvaRatePercent =
-        typeof (updated as any).iva_rate_percent === 'number'
-          ? (updated as any).iva_rate_percent
-          : typeof updatedInvoice?.totals?.iva_rate_percent === 'number'
-            ? updatedInvoice.totals.iva_rate_percent
-            : null;
+      let finalIvaRatePercent: number | null = null;
+      if (typeof (updated as any).iva_rate_percent === 'number') {
+        finalIvaRatePercent = (updated as any).iva_rate_percent;
+      } else {
+        const percentStr: string | undefined =
+          updatedInvoice?.totals?.taxes?.categories?.[0]?.rates?.[0]?.percent;
+        if (typeof percentStr === 'string') {
+          const cleaned = percentStr.replace('%', '').trim();
+          const parsed = parseFloat(cleaned);
+          finalIvaRatePercent = Number.isFinite(parsed) ? parsed : null;
+        }
+      }
 
       return {
         success: true,

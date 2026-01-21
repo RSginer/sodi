@@ -11,7 +11,7 @@ const logger = new PinoLogger({
 
 // Minimal Zod schema to ensure required GOBL Invoice fields exist
 // and to document each property.
-const GoblInvoiceSchema = z.object({
+export const GoblInvoiceSchema = z.object({
   type: z
     .string()
     .describe('Tipo de factura GOBL, normalmente \"standard\" para un ticket/factura simplificada.'),
