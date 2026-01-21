@@ -23,8 +23,22 @@ const Layout: FC<{ title: string; children?: any }> = (props) => {
         <title>{props.title}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <style>
+          {`
+            dialog {
+              margin: auto;
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+            }
+            dialog::backdrop {
+              background-color: rgba(0, 0, 0, 0.6);
+            }
+          `}
+        </style>
       </head>
-      <body class="min-h-screen bg-slate-50 text-slate-900 font-[system-ui]">
+      <body class="min-h-screen bg-[#E5E5E5] text-[#111B21] font-[system-ui]">
         {props.children}
       </body>
     </html>
@@ -44,42 +58,42 @@ const ExpensesView: FC<{
     <Layout title={title}>
       <div class="mx-auto flex min-h-screen max-w-xl flex-col px-4 py-5 sm:max-w-2xl sm:px-6">
         <header class="mb-4">
-          <h1 class="text-xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+          <h1 class="text-xl font-semibold tracking-tight text-[#111B21] sm:text-3xl">
             {title}
           </h1>
-          <p class="mt-2 text-base text-slate-500 sm:text-lg">
+          <p class="mt-2 text-sm text-[#667781] sm:text-base">
             Filtra tus gastos por fecha de factura y revisa los tickets registrados.
           </p>
         </header>
 
-        <section class="mb-4 rounded-2xl bg-white/90 p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
+        <section class="mb-4 rounded-lg bg-white p-4 shadow-sm sm:p-5">
           <form
             method="get"
             action="/expenses"
             class="flex flex-col gap-4"
           >
             <input type="hidden" name="profileId" value={props.profileId} />
-            <label class="flex w-full flex-col text-sm font-medium text-slate-700">
+            <label class="flex w-full flex-col text-sm font-medium text-[#111B21]">
               Desde
               <input
                 type="date"
                 name="fromDate"
                 value={props.fromDate}
-                class="mt-2  rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                class="mt-2 rounded-lg border border-[#D1D7DB] bg-white px-3 py-2 text-sm text-[#111B21] outline-none transition focus:border-[#25D366] focus:ring-1 focus:ring-[#25D366]"
               />
             </label>
-            <label class="flex w-full flex-col text-sm font-medium text-slate-700">
+            <label class="flex w-full flex-col text-sm font-medium text-[#111B21]">
               Hasta
               <input
                 type="date"
                 name="toDate"
                 value={props.toDate}
-                class="mt-2 rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                class="mt-2 rounded-lg border border-[#D1D7DB] bg-white px-3 py-2 text-sm text-[#111B21] outline-none transition focus:border-[#25D366] focus:ring-1 focus:ring-[#25D366]"
               />
             </label>
             <button
               type="submit"
-              class="mt-1 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:brightness-110 sm:mt-0 sm:w-auto sm:px-6 sm:text-lg"
+              class="mt-2 w-full rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#20BA5A] sm:mt-0 sm:w-auto"
             >
               Filtrar
             </button>
@@ -88,11 +102,11 @@ const ExpensesView: FC<{
 
         <section class="flex-1">
           {props.expenses.length === 0 ? (
-            <div class="mt-6 rounded-2xl bg-white/80 px-4 py-10 text-center text-base text-slate-500 shadow-inner sm:text-lg">
+            <div class="mt-6 rounded-lg bg-white px-4 py-10 text-center text-sm text-[#667781] sm:text-base">
               No hay gastos registrados para el rango seleccionado.
             </div>
           ) : (
-            <div class="mt-4 flex flex-col gap-3 pb-6 sm:gap-4">
+            <div class="mt-4 flex flex-col gap-2 pb-6 sm:gap-3">
               {props.expenses.map((e) => {
                 const invoice = e.goblInvoice || {};
                 const supplier = invoice.supplier || {};
@@ -130,47 +144,68 @@ const ExpensesView: FC<{
                   ivaRatePercent = Number.isFinite(parsed) ? parsed : null;
                 }
 
+                const lines = Array.isArray(invoice.lines) ? invoice.lines : [];
+                const dialogId = `lines-${e.id}`;
+
                 return (
-                  <article class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
+                  <article class="rounded-lg bg-white p-3 shadow-sm sm:p-4">
                     <div class="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <h2 class="text-lg font-semibold text-slate-900 sm:text-xl">
+                        <h2 class="text-base font-medium text-[#111B21] sm:text-lg">
                           {supplierName}
                         </h2>
                         {supplierTaxId && (
-                          <p class="mt-1 text-sm text-slate-500">
+                          <p class="mt-0.5 text-xs text-[#667781]">
                             CIF: <span class="font-mono">{supplierTaxId}</span>
                           </p>
                         )}
                       </div>
-                      <p class="text-xl font-bold text-blue-600 sm:text-2xl">
+                      <p class="text-lg font-semibold text-[#25D366] sm:text-xl">
                         {typeof totalAmount === 'number'
                           ? formatCurrency(totalAmount, currency || 'EUR')
                           : '-'}
                       </p>
                     </div>
 
-                    <div class="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-600 sm:grid-cols-2 sm:text-base">
+                    <div class="mt-2 grid grid-cols-1 gap-1.5 text-xs text-[#667781] sm:grid-cols-2 sm:text-sm">
                       {issueDate && (
-                        <div class="flex gap-2">
-                          <span class="font-medium text-slate-500">Fecha factura:</span>
+                        <div class="flex gap-1.5">
+                          <span class="font-medium">Fecha factura:</span>
                           <span>{issueDate}</span>
                         </div>
                       )}
                       {typeof ivaRatePercent === 'number' && (
-                        <div class="flex gap-2">
-                          <span class="font-medium text-slate-500">IVA:</span>
+                        <div class="flex gap-1.5">
+                          <span class="font-medium">IVA:</span>
                           <span>{ivaRatePercent}%</span>
                         </div>
                       )}
                     </div>
 
-                    <div class="mt-3 flex items-center justify-between gap-3">
-                      <p class="text-xs text-slate-400 sm:text-sm">
-                        Registrado:{' '}
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        class="inline-flex items-center rounded-lg border border-[#D1D7DB] bg-white px-2.5 py-1.5 text-xs font-medium text-[#111B21] transition hover:bg-[#F5F6F6]"
+                        onclick={`document.getElementById('${dialogId}')?.showModal()`}
+                      >
+                        Ver líneas
+                      </button>
+
+                      {e.sourceImageUrl && (
+                        <a
+                          href={e.sourceImageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center rounded-lg bg-[#25D366] px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-[#20BA5A]"
+                        >
+                          Descargar ticket
+                        </a>
+                      )}
+
+                      <p class="ml-auto text-xs text-[#667781]">
                         {new Date(e.createdAt).toLocaleString('es-ES', {
                           year: 'numeric',
-                          month: 'long',
+                          month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
@@ -178,16 +213,97 @@ const ExpensesView: FC<{
                       </p>
                     </div>
 
-                    {e.sourceImageUrl && (
-                      <a
-                        href={e.sourceImageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:brightness-110"
-                      >
-                        Descargar ticket
-                      </a>
-                    )}
+                    <dialog
+                      id={dialogId}
+                      class="w-[90vw] max-w-4xl rounded-lg border border-[#D1D7DB] bg-white p-0 shadow-2xl backdrop:bg-black/50"
+                    >
+                      <div class="flex items-center justify-between border-b border-[#E5E5E5] bg-[#F0F2F5] px-4 py-3">
+                        <h3 class="text-sm font-semibold text-[#111B21] sm:text-base">
+                          Líneas del ticket
+                        </h3>
+                        <button
+                          type="button"
+                          class="rounded-lg px-2 py-1 text-xs font-medium text-[#667781] transition hover:bg-[#E5E5E5] hover:text-[#111B21]"
+                          onclick={`document.getElementById('${dialogId}')?.close()`}
+                        >
+                          ✕ Cerrar
+                        </button>
+                      </div>
+
+                      <div class="max-h-[60vh] overflow-auto px-4 py-3">
+                        {lines.length === 0 ? (
+                          <p class="text-sm text-[#667781]">
+                            No se han encontrado líneas en este ticket.
+                          </p>
+                        ) : (
+                          <table class="min-w-full border-collapse text-left text-xs text-[#111B21] sm:text-sm">
+                            <thead>
+                              <tr class="border-b border-[#E5E5E5] bg-[#F5F6F6]">
+                                <th class="px-2 py-2 font-medium text-[#667781]">#</th>
+                                <th class="px-2 py-2 font-medium text-[#667781]">Concepto</th>
+                                <th class="px-2 py-2 font-medium text-right text-[#667781]">Cantidad</th>
+                                <th class="px-2 py-2 font-medium text-right text-[#667781]">Precio</th>
+                                <th class="px-2 py-2 font-medium text-right text-[#667781]">IVA</th>
+                                <th class="px-2 py-2 font-medium text-right text-[#667781]">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lines.map((line: any, idx: number) => {
+                                const lineQuantity =
+                                  typeof line.quantity === 'string'
+                                    ? line.quantity
+                                    : line.quantity?.toString?.() ?? '';
+                                const lineItem = line.item || {};
+                                const lineName = (lineItem.name as string | undefined) ?? '';
+                                const linePrice =
+                                  typeof lineItem.price === 'string'
+                                    ? lineItem.price
+                                    : lineItem.price?.toString?.() ?? '';
+
+                                const lineTotal =
+                                  typeof line.total === 'string'
+                                    ? line.total
+                                    : line.total?.toString?.() ?? '';
+
+                                const linePercentStr: string | undefined =
+                                  line.taxes?.[0]?.percent;
+                                const lineIva =
+                                  typeof linePercentStr === 'string'
+                                    ? linePercentStr
+                                    : '';
+
+                                return (
+                                  <tr
+                                    class={idx % 2 === 0 ? 'border-b border-[#E5E5E5]' : 'border-b border-[#E5E5E5] bg-[#F5F6F6]'}
+                                  >
+                                    <td class="px-2 py-1.5 text-[#667781]">
+                                      {(line.i as number | undefined) ?? idx + 1}
+                                    </td>
+                                    <td class="px-2 py-1.5">
+                                      <div class="max-w-[16rem] truncate sm:max-w-xs">
+                                        {lineName || <span class="text-[#667781]">Sin descripción</span>}
+                                      </div>
+                                    </td>
+                                    <td class="px-2 py-1.5 text-right tabular-nums">
+                                      {lineQuantity || '-'}
+                                    </td>
+                                    <td class="px-2 py-1.5 text-right tabular-nums">
+                                      {linePrice || '-'}
+                                    </td>
+                                    <td class="px-2 py-1.5 text-right tabular-nums">
+                                      {lineIva || '-'}
+                                    </td>
+                                    <td class="px-2 py-1.5 text-right tabular-nums font-medium">
+                                      {lineTotal || '-'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </dialog>
                   </article>
                 );
               })}
