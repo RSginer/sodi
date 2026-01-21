@@ -63,7 +63,6 @@ export const saveUserDataTool = createTool({
     }
 
     let invopopData: any = profile?.invopop_data || {
-      $schema: "https://gobl.org/draft-0/org/party",
       tax_id: { country: "ES" },
       people: [{}],
       addresses: [],
