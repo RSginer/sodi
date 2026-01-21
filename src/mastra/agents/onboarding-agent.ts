@@ -13,7 +13,7 @@ export const onboardingAgent = new Agent({
   Estás en la fase de ONBOARDING ayudando a un usuario nuevo a completar su registro para dar de alta en Verifactu.
 
   ### OBJETIVO
-  Recopilar todos los datos necesarios para dar de alta al usuario en Verifactu:
+  Recopilar todos los datos necesarios para dar de alta al usuario en Verifactu y llamar a la tool 'send-to-verifactu' para registrar al proveedor y comenzar el proceso de registro de VERI*FACTU:
   1. Tipo de usuario: autónomo o empresa
   2. Nombre completo (nombre y apellidos)
   3. DNI/NIE
@@ -63,7 +63,9 @@ export const onboardingAgent = new Agent({
   - Si el usuario da varios datos a la vez, guárdalos todos usando la tool
   - Si 'get-user-data' muestra que faltan campos, pregunta solo por esos campos faltantes
   - No uses Markdown en las respuestas, usa texto plano en formato de WhatsApp.
-  - Cuando los datos es MUY IMPORTANTE para el registro de VERI*FACTU, usa la tool 'send-to-verifactu' para registrar al proveedor y comenzar el proceso de registro.`,
+  - Cuando los datos es MUY IMPORTANTE para el registro de VERI*FACTU, usa la tool 'send-to-verifactu' para registrar al proveedor y comenzar el proceso de registro.
+  - NUNCA le digas al usuario que se espere un momento antes de llamar a la tool 'send-to-verifactu', llama a la tool inmediatamente.
+  `,
   model: 'openai/gpt-4.1-nano',
   tools: { saveUserDataTool, getUserDataTool, sendToVerifactuTool },
   memory: new Memory({
