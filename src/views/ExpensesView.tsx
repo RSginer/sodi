@@ -54,6 +54,52 @@ const ExpensesView: FC<{
 }> = (props) => {
   const title = `Gastos de ${props.userName || 'usuario'}`;
 
+  // Sumatorio del resultado de la búsqueda
+  let totalGastado = 0;
+  let totalIvaDeducible = 0;
+  let aggregateCurrency: string | null = null;
+
+  for (const e of props.expenses) {
+    const invoice = (e as any).goblInvoice || {};
+    const currency = invoice.currency as string | undefined;
+    if (!aggregateCurrency && currency) {
+      aggregateCurrency = currency;
+    }
+
+    const totals = invoice.totals;
+    if (!totals) continue;
+
+    // Total gastado: payable -> total_with_tax -> sum
+    let totalStr: string | undefined;
+    if (typeof totals.payable === 'string') {
+      totalStr = totals.payable;
+    } else if (typeof totals.total_with_tax === 'string') {
+      totalStr = totals.total_with_tax;
+    } else if (typeof totals.sum === 'string') {
+      totalStr = totals.sum;
+    }
+    if (totalStr) {
+      const v = parseFloat(totalStr);
+      if (Number.isFinite(v)) {
+        totalGastado += v;
+      }
+    }
+
+    // Total IVA deducible: totals.tax -> totals.taxes.sum
+    let ivaStr: string | undefined;
+    if (typeof totals.tax === 'string') {
+      ivaStr = totals.tax;
+    } else if (typeof totals.taxes?.sum === 'string') {
+      ivaStr = totals.taxes.sum;
+    }
+    if (ivaStr) {
+      const v = parseFloat(ivaStr);
+      if (Number.isFinite(v)) {
+        totalIvaDeducible += v;
+      }
+    }
+  }
+
   return (
     <Layout title={title}>
       <div class="mx-auto flex min-h-screen max-w-xl flex-col px-4 py-5 sm:max-w-2xl sm:px-6">
@@ -65,6 +111,28 @@ const ExpensesView: FC<{
             Filtra tus gastos por fecha de factura y revisa los tickets registrados.
           </p>
         </header>
+
+        {props.expenses.length > 0 && (
+          <section class="mb-3 rounded-lg bg-white p-4 shadow-sm sm:p-5">
+            <h2 class="mb-2 text-sm font-semibold text-[#111B21]">
+              Resumen del periodo
+            </h2>
+            <div class="flex flex-col gap-1 text-xs text-[#667781] sm:flex-row sm:items-baseline sm:justify-between sm:text-sm">
+              <div>
+                <span class="font-medium">Total gastado:</span>
+                <span class="ml-1 font-semibold text-[#111B21]">
+                  {formatCurrency(totalGastado, aggregateCurrency || 'EUR')}
+                </span>
+              </div>
+              <div>
+                <span class="font-medium">Total IVA deducible:</span>
+                <span class="ml-1 font-semibold text-[#25D366]">
+                  {formatCurrency(totalIvaDeducible, aggregateCurrency || 'EUR')}
+                </span>
+              </div>
+            </div>
+          </section>
+        )}
 
         <section class="mb-4 rounded-lg bg-white p-4 shadow-sm sm:p-5">
           <form
@@ -144,6 +212,16 @@ const ExpensesView: FC<{
                   ivaRatePercent = Number.isFinite(parsed) ? parsed : null;
                 }
 
+                // Total de IVA pagado: usamos totals.tax o totals.taxes.sum (todas strings)
+                let ivaTotalAmount: number | null = null;
+                if (totals) {
+                  if (typeof totals.tax === 'string') {
+                    ivaTotalAmount = parseFloat(totals.tax);
+                  } else if (typeof totals.taxes?.sum === 'string') {
+                    ivaTotalAmount = parseFloat(totals.taxes.sum);
+                  }
+                }
+
                 const lines = Array.isArray(invoice.lines) ? invoice.lines : [];
                 const dialogId = `lines-${e.id}`;
 
@@ -180,6 +258,14 @@ const ExpensesView: FC<{
                           <span>{ivaRatePercent}%</span>
                         </div>
                       )}
+                      {typeof ivaTotalAmount === 'number' && (
+                        <div class="flex gap-1.5">
+                          <span class="font-medium">Total IVA:</span>
+                          <span class="font-semibold">
+                            {formatCurrency(ivaTotalAmount, currency || 'EUR')}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div class="mt-2 flex flex-wrap items-center gap-2">
@@ -194,8 +280,7 @@ const ExpensesView: FC<{
                       {e.sourceImageUrl && (
                         <a
                           href={e.sourceImageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          download
                           class="inline-flex items-center rounded-lg bg-[#25D366] px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-[#20BA5A]"
                         >
                           Descargar ticket
@@ -244,7 +329,7 @@ const ExpensesView: FC<{
                                 <th class="px-2 py-2 font-medium text-right text-[#667781]">Cantidad</th>
                                 <th class="px-2 py-2 font-medium text-right text-[#667781]">Precio</th>
                                 <th class="px-2 py-2 font-medium text-right text-[#667781]">IVA</th>
-                                <th class="px-2 py-2 font-medium text-right text-[#667781]">Total</th>
+                                <th class="px-2 py-2 font-medium text-right text-[#667781]">Total con IVA</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -260,17 +345,38 @@ const ExpensesView: FC<{
                                     ? lineItem.price
                                     : lineItem.price?.toString?.() ?? '';
 
-                                const lineTotal =
-                                  typeof line.total === 'string'
-                                    ? line.total
-                                    : line.total?.toString?.() ?? '';
-
                                 const linePercentStr: string | undefined =
                                   line.taxes?.[0]?.percent;
                                 const lineIva =
                                   typeof linePercentStr === 'string'
                                     ? linePercentStr
                                     : '';
+
+                                // Cálculos numéricos para el total con IVA
+                                const quantityNum = parseFloat(
+                                  lineQuantity.replace(',', '.')
+                                );
+                                const priceNum = parseFloat(
+                                  linePrice.replace(',', '.')
+                                );
+                                const ivaNum = (() => {
+                                  if (typeof linePercentStr !== 'string') return 0;
+                                  const cleaned = linePercentStr
+                                    .replace('%', '')
+                                    .trim();
+                                  const parsed = parseFloat(cleaned);
+                                  return Number.isFinite(parsed) ? parsed : 0;
+                                })();
+
+                                const totalWithIvaNum =
+                                  Number.isFinite(quantityNum) &&
+                                  Number.isFinite(priceNum)
+                                    ? quantityNum * priceNum * (1 + ivaNum / 100)
+                                    : NaN;
+
+                                const lineTotal = Number.isFinite(totalWithIvaNum)
+                                  ? totalWithIvaNum.toFixed(2)
+                                  : '';
 
                                 return (
                                   <tr
@@ -288,13 +394,17 @@ const ExpensesView: FC<{
                                       {lineQuantity || '-'}
                                     </td>
                                     <td class="px-2 py-1.5 text-right tabular-nums">
-                                      {linePrice || '-'}
+                                      {Number.isFinite(priceNum)
+                                        ? formatCurrency(priceNum, invoice.currency || 'EUR')
+                                        : '-'}
                                     </td>
                                     <td class="px-2 py-1.5 text-right tabular-nums">
                                       {lineIva || '-'}
                                     </td>
                                     <td class="px-2 py-1.5 text-right tabular-nums font-medium">
-                                      {lineTotal || '-'}
+                                      {Number.isFinite(totalWithIvaNum)
+                                        ? formatCurrency(totalWithIvaNum, invoice.currency || 'EUR')
+                                        : '-'}
                                     </td>
                                   </tr>
                                 );
