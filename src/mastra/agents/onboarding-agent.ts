@@ -63,9 +63,7 @@ export const onboardingAgent = new Agent({
   - Si el usuario da varios datos a la vez, guárdalos todos usando la tool
   - Si 'get-user-data' muestra que faltan campos, pregunta solo por esos campos faltantes
   - No uses Markdown en las respuestas, usa texto plano en formato de WhatsApp.
-
-  ### FINALIZACIÓN
-  Cuando tengas al menos: tipo de usuario, email, nombre, DNI, NIF/CIF y dirección fiscal, usa la tool 'send-to-verifactu' para registrar al proveedor y comenzar el proceso de registro de VERI*FACTU.`,
+  - Cuando los datos es MUY IMPORTANTE para el registro de VERI*FACTU, usa la tool 'send-to-verifactu' para registrar al proveedor y comenzar el proceso de registro.`,
   model: 'openai/gpt-4.1-nano',
   tools: { saveUserDataTool, getUserDataTool, sendToVerifactuTool },
   memory: new Memory({
