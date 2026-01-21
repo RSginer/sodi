@@ -40,7 +40,7 @@ export const route = registerApiRoute('/expenses', {
 
     let query = supabase
       .from('expenses_invoices')
-      .select('id, created_at, gobl_invoice, iva_rate_percent, source_image_url')
+      .select('id, created_at, gobl_invoice, source_image_url')
       .eq('profile_id', profileId);
 
     if (fromDate) {
@@ -59,49 +59,12 @@ export const route = registerApiRoute('/expenses', {
     }
 
     const expenses =
-      data?.map((row: any) => {
-        const invoice = row.gobl_invoice || {};
-
-        const supplierName =
-          invoice?.supplier?.name ??
-          invoice?.supplier?.party?.name ??
-          null;
-
-        const supplierTaxId =
-          (invoice?.supplier?.tax_id?.code as string | undefined) ?? null;
-
-        const issueDate = invoice?.issue_date ?? null;
-        const currency = invoice?.currency ?? null;
-
-        let totalAmount: number | null = null;
-        if (typeof invoice?.totals?.payable === 'number') {
-          totalAmount = invoice.totals.payable;
-        } else if (typeof invoice?.totals?.sum === 'number') {
-          totalAmount = invoice.totals.sum;
-        }
-
-        const ivaRatePercent =
-          typeof row.iva_rate_percent === 'number'
-            ? row.iva_rate_percent
-            : typeof invoice?.totals?.iva_rate_percent === 'number'
-              ? invoice.totals.iva_rate_percent
-              : null;
-
-        const sourceImageUrl =
-          (row.source_image_url as string | undefined) ?? null;
-
-        return {
-          id: row.id as string,
-          createdAt: row.created_at as string,
-          supplierName,
-          supplierTaxId,
-          issueDate,
-          currency,
-          totalAmount,
-          ivaRatePercent,
-          sourceImageUrl,
-        };
-      }) ?? [];
+      data?.map((row: any) => ({
+        id: row.id as string,
+        createdAt: row.created_at as string,
+        goblInvoice: row.gobl_invoice,
+        sourceImageUrl: (row.source_image_url as string | undefined) ?? null,
+      })) ?? [];
 
     return c.html(
       <ExpensesView

@@ -63,12 +63,7 @@ export const getExpensesTool = createTool({
             .number()
             .nullable()
             .optional()
-            .describe('Importe total pagado si está disponible'),
-          ivaRatePercent: z
-            .number()
-            .nullable()
-            .optional()
-            .describe('Tipo de IVA aplicado al gasto, en porcentaje'),
+            .describe('Importe total pagado si está disponible')
         }),
       )
       .describe('Lista de gastos del usuario'),
@@ -91,7 +86,7 @@ export const getExpensesTool = createTool({
     try {
       let query = supabase
         .from('expenses_invoices')
-        .select('id, created_at, gobl_invoice, iva_rate_percent')
+        .select('id, created_at, gobl_invoice')
         .eq('profile_id', profile.id);
 
       if (fromDate) {

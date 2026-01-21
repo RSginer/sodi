@@ -3,12 +3,7 @@ import type { FC } from 'hono/jsx';
 type ExpenseItem = {
   id: string;
   createdAt: string;
-  supplierName?: string | null;
-  supplierTaxId?: string | null;
-  issueDate?: string | null;
-  currency?: string | null;
-  totalAmount?: number | null;
-  ivaRatePercent?: number | null;
+  goblInvoice: any;
   sourceImageUrl?: string | null;
 };
 
@@ -98,56 +93,92 @@ const ExpensesView: FC<{
             </div>
           ) : (
             <div class="mt-4 flex flex-col gap-3 pb-6 sm:gap-4">
-              {props.expenses.map((e) => (
-                <article class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
-                  <div class="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <h2 class="text-lg font-semibold text-slate-900 sm:text-xl">
-                        {e.supplierName || 'Sin proveedor'}
-                      </h2>
-                      {e.supplierTaxId && (
-                        <p class="mt-1 text-sm text-slate-500">
-                          CIF: <span class="font-mono">{e.supplierTaxId}</span>
-                        </p>
+              {props.expenses.map((e) => {
+                const invoice = e.goblInvoice || {};
+                const supplier = invoice.supplier || {};
+                const supplierName: string =
+                  (supplier.name as string | undefined) ??
+                  (supplier.party?.name as string | undefined) ??
+                  'Sin proveedor';
+
+                const supplierTaxId: string | null =
+                  (supplier.tax_id?.code as string | undefined) ?? null;
+
+                const issueDate: string | null = invoice.issue_date ?? null;
+                const currency: string | null = invoice.currency ?? null;
+
+                // Totales: usamos payable, luego total_with_tax, luego sum (todas strings)
+                let totalAmount: number | null = null;
+                const totals = invoice.totals;
+                if (totals) {
+                  if (typeof totals.payable === 'string') {
+                    totalAmount = parseFloat(totals.payable);
+                  } else if (typeof totals.total_with_tax === 'string') {
+                    totalAmount = parseFloat(totals.total_with_tax);
+                  } else if (typeof totals.sum === 'string') {
+                    totalAmount = parseFloat(totals.sum);
+                  }
+                }
+
+                // IVA: intentamos extraer el primer percent de totals.taxes.categories[0].rates[0].percent
+                let ivaRatePercent: number | null = null;
+                const percentStr: string | undefined =
+                  totals?.taxes?.categories?.[0]?.rates?.[0]?.percent;
+                if (typeof percentStr === 'string') {
+                  const cleaned = percentStr.replace('%', '').trim();
+                  const parsed = parseFloat(cleaned);
+                  ivaRatePercent = Number.isFinite(parsed) ? parsed : null;
+                }
+
+                return (
+                  <article class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h2 class="text-lg font-semibold text-slate-900 sm:text-xl">
+                          {supplierName}
+                        </h2>
+                        {supplierTaxId && (
+                          <p class="mt-1 text-sm text-slate-500">
+                            CIF: <span class="font-mono">{supplierTaxId}</span>
+                          </p>
+                        )}
+                      </div>
+                      <p class="text-xl font-bold text-blue-600 sm:text-2xl">
+                        {typeof totalAmount === 'number'
+                          ? formatCurrency(totalAmount, currency || 'EUR')
+                          : '-'}
+                      </p>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-600 sm:grid-cols-2 sm:text-base">
+                      {issueDate && (
+                        <div class="flex gap-2">
+                          <span class="font-medium text-slate-500">Fecha factura:</span>
+                          <span>{issueDate}</span>
+                        </div>
+                      )}
+                      {typeof ivaRatePercent === 'number' && (
+                        <div class="flex gap-2">
+                          <span class="font-medium text-slate-500">IVA:</span>
+                          <span>{ivaRatePercent}%</span>
+                        </div>
                       )}
                     </div>
-                    <p class="text-xl font-bold text-blue-600 sm:text-2xl">
-                      {typeof e.totalAmount === 'number'
-                        ? formatCurrency(e.totalAmount, e.currency || 'EUR')
-                        : '-'}
-                    </p>
-                  </div>
 
-                  <div class="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-600 sm:grid-cols-2 sm:text-base">
-                    {e.issueDate && (
-                      <div class="flex gap-2">
-                        <span class="font-medium text-slate-500">Fecha factura:</span>
-                        <span>{e.issueDate}</span>
-                      </div>
-                    )}
-                    {typeof e.ivaRatePercent === 'number' && (
-                      <div class="flex gap-2">
-                        <span class="font-medium text-slate-500">IVA:</span>
-                        <span>{e.ivaRatePercent}%</span>
-                      </div>
-                    )}
-                  </div>
+                    <div class="mt-3 flex items-center justify-between gap-3">
+                      <p class="text-xs text-slate-400 sm:text-sm">
+                        Registrado:{' '}
+                        {new Date(e.createdAt).toLocaleString('es-ES', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
 
-                  <div class="mt-3 flex items-center justify-between gap-3">
-                    <p class="text-xs text-slate-400 sm:text-sm">
-                      Registrado:{' '}
-                      {new Date(e.createdAt).toLocaleString('es-ES', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
-
-                   
-                  </div>
-                  {e.sourceImageUrl && (
+                    {e.sourceImageUrl && (
                       <a
                         href={e.sourceImageUrl}
                         target="_blank"
@@ -157,8 +188,9 @@ const ExpensesView: FC<{
                         Descargar ticket
                       </a>
                     )}
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
