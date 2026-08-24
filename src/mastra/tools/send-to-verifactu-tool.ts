@@ -1,0 +1,134 @@
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { supabase } from '../supabase';
+import { PinoLogger } from '@mastra/loggers';
+import { GoblParty, InvopopClient } from '../invopop/invopop-client';
+import { UserProfile } from '../types/UserProfile';
+
+const logger = new PinoLogger({ name: 'SendToVerifactuTool', level: 'info' });
+
+export const sendToVerifactuTool = createTool({
+  id: 'send-to-verifactu',
+  description: `Registers a supplier in Invopop for VERI*FACTU invoice generation.
+  This tool creates a silo entry in Invopop with the supplier's data and starts the VERI*FACTU registration workflow.
+  Use this tool when you have collected all required user data (user type, name, DNI, NIF/CIF, address, email).
+  The tool will validate that all required data is present before proceeding.`,
+  outputSchema: z.object({
+    success: z.boolean(),
+    message: z.string(),
+    siloEntryId: z.string().optional().describe('ID of the created silo entry in Invopop'),
+    jobId: z.string().optional().describe('ID of the created job in Invopop'),
+    registrationLink: z.string().optional().describe('URL for supplier to complete registration'),
+    missingFields: z.array(z.string()).optional().describe('Fields that are missing'),
+  }),
+  execute: async (_, context) => {
+    const profile = context?.requestContext?.get('profile') as UserProfile;
+
+    if (!profile) {
+      return { success: false, message: 'No se pudo identificar al usuario' };
+    }
+
+    const invopopClient = new InvopopClient();
+
+    const invopopData = profile.invopop_data as GoblParty | null;
+    const userType = profile.user_type as 'autonomo' | 'empresa' | null;
+    const person = invopopData?.people?.[0];
+    const firstName = person?.name?.given;
+    const lastName = person?.name?.surname;
+    const dni = person?.identities?.[0]?.code;
+    const taxCode = invopopData?.tax_id?.code;
+    const companyName = invopopData?.name;
+    const companyAddress = invopopData?.addresses?.[0];
+    const personalAddress = person?.addresses?.[0];
+    const email = profile.email || invopopData?.emails?.[0]?.addr;
+    const phone = profile.phone;
+  
+    const missingFields: string[] = [];
+
+    if (userType === 'empresa') {
+      if (!companyName) missingFields.push('nombre de empresa');
+      if (!taxCode) missingFields.push('CIF');
+      if (!firstName || !lastName) missingFields.push('nombre completo del representante legal');
+      if (!dni) missingFields.push('DNI del representante legal');
+    } else {
+      if (!firstName || !lastName) missingFields.push('nombre completo');
+      if (!taxCode) missingFields.push('NIF');
+      if (!dni) missingFields.push('DNI');
+    }
+
+    if (!companyAddress?.street) missingFields.push('dirección fiscal');
+    if (!email) missingFields.push('email');
+
+    if (!userType) {
+      missingFields.push('tipo de usuario');
+    }
+
+    if (missingFields.length > 0) {
+      return { success: false, message: `Faltan datos requeridos: ${missingFields.join(', ')}` };
+    }
+
+    const goblParty = InvopopClient.buildGoblParty(
+      userType as 'autonomo' | 'empresa',
+      companyName,
+      firstName,
+      lastName,
+      dni,
+      taxCode!,
+      email!,
+      companyAddress,
+      personalAddress,
+      {
+        user: profile.id,
+        phone: phone,
+      }
+    );
+
+    logger.info('Creating silo entry in Invopop', { userType, taxCode });
+
+    const siloEntryId = await invopopClient.createSiloEntry(goblParty);
+    logger.info('Silo entry created', { siloEntryId });
+
+    const jobId = await invopopClient.createWorkflowJob(siloEntryId);
+    logger.info('Job created', { jobId, siloEntryId });
+
+    let registrationLink: string | undefined;
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const verifactuLink = await invopopClient.getRegistrationLink(siloEntryId);
+
+    logger.info('Verifactu link', { verifactuLink });
+
+    // Save silo_entry_id to profiles
+    const updateData: any = {
+      invopop_silo_entry_id: siloEntryId,
+    };
+
+    if (verifactuLink) {
+      registrationLink = `${process.env.PUBLIC_URL}/verifactu?id=${profile.id}`;
+      logger.info('Registration link', { registrationLink });
+      updateData.verifactu_link = verifactuLink;
+      updateData.verifactu_status = 'processing';
+    }
+
+    await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', profile.id);
+
+    context?.requestContext?.set('profile', {
+      ...profile,
+      invopop_silo_entry_id: siloEntryId,
+      ...(verifactuLink && { verifactu_link: verifactuLink, verifactu_status: 'processing' }),
+    });
+
+    return {
+      success: true,
+      message: `Proveedor registrado con éxito. El proceso de registro de VERI*FACTU ha comenzado.${registrationLink ? ` El usuario debe completar el registro en: ${registrationLink}` : ''}`,
+      siloEntryId,
+      jobId,
+      registrationLink,
+    };
+  },
+});
+

@@ -4,6 +4,12 @@
         "type": "stdio",
         "command": "npx",
         "args": ["-y", "@mastra/mcp-docs-server"]
+      },
+      "invopop-docs": {
+        "url": "https://docs.invopop.com/mcp"
+      },
+      "gobl-docs": {
+        "url": "https://docs.gobl.org/mcp"
       }
     }
   }

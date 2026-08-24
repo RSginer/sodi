@@ -1,100 +1,139 @@
 import { registerApiRoute } from "@mastra/core/server";
 import { PinoLogger } from "@mastra/loggers";
 import { env } from "hono/adapter";
-import twilio from "twilio";
+import UserService from "../services/user-service";
+import { RequestContext } from "@mastra/core/request-context";
+import {
+    MessagingResponse,
+    twilio,
+    validateRequest
+} from "../twilio";
+
+import { Context } from "hono";
 
 const logger = new PinoLogger({
-  name: "WhatsappWebhook",
-  level: "info",
+    name: "WhatsappWebhook",
+    level: "info",
 });
 
-export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
-  method: "POST",
-  handler: async (c) => {
-    const accountSid = env<{ TWILIO_ACCOUNT_SID: string }>(c).TWILIO_ACCOUNT_SID;
-    const authToken = env<{ TWILIO_AUTH_TOKEN: string }>(c).TWILIO_AUTH_TOKEN;
-    
-    const client = twilio(accountSid, authToken, {
-        logLevel: "debug",
-    });
+
+const parseFormData = async (c: Context): Promise<Record<string, string>> => {
     const formData = await c.req.formData();
-    
     const params: Record<string, string> = {};
-
     formData.forEach((value, key) => {
-      params[key] = value.toString();
+        params[key] = value.toString();
     });
+    return params;
+}
 
-    const twilioSignature = c.req.header("X-Twilio-Signature");
+export const whatsappWebhook = registerApiRoute("/whatsapp/webhook", {
+    method: "POST",
+    handler: async (c: Context) => {
+        const authToken = env<{ TWILIO_AUTH_TOKEN: string }>(c).TWILIO_AUTH_TOKEN;
+        const params = await parseFormData(c);
+        const twilioSignature = c.req.header("X-Twilio-Signature");
+        const url = new URL(c.req.url);
+        url.protocol = "https";
 
-    if (twilioSignature && authToken) {
-      const urlObj = new URL(c.req.url);
-      urlObj.protocol = "https:";
-      const publicUrl = urlObj.toString();
-      logger.info("Validating Twilio signature", { publicUrl, params });
-      const isValid = twilio.validateRequest(authToken, twilioSignature, publicUrl, params as Record<string, any>);
+        if (!validateRequest(authToken!, twilioSignature!, url.toString(), params as Record<string, any>)) {
+            const response = new MessagingResponse();
+            response.message("No tienes permisos para acceder a este servicio.");
+            c.header("Content-Type", "text/xml");
+            return c.body(response.toString(), 200);
+        }
 
-      logger.info("Valid Twilio signature", { isValid });
+        void handleMessage(c, params);
 
-      if (!isValid) {
-        const MessagingResponse = twilio.twiml.MessagingResponse;
-        const response = new MessagingResponse();
-        response.message("No tienes permisos para acceder a este servicio.");
-        c.header("Content-Type", "text/xml");
-        return c.body(response.toString(), 200);
-      }
+        return c.body(null, 200);
+    },
+});
 
-    }
 
-    const messageBody = params["Body"] || "";
-    const messageSid = params["MessageSid"] || "";
-    const channelMetadata = JSON.parse(params.ChannelMetadata) as {
-        type: string;
-        data: {
-            context: {
-                ProfileName: string;
-                WaId: string;
-            };
-        };
-    };
-
-    const threadId = channelMetadata.data.context.WaId;
+const handleMessage = async (c: Context, params: Record<string, string>) => {
+    const threadId = params["WaId"];
 
     try {
-      if (messageSid?.startsWith("SM")) {
-        try {
-          await client.messaging.v2.typingIndicator.create({
-            messageId: messageSid,
-            channel: "whatsapp",
-          });
-        } catch (e) {
-          logger.warn("Typing indicator failed, skipping...");
+        let profile = await UserService.getUserProfileByPhone(threadId);
+
+        if (!profile) {
+            profile = await UserService.createUserProfile(threadId, JSON.parse(params["ChannelMetadata"] || "{}"));
         }
-      }
 
-      const agent = c.var.mastra.getAgent("weatherAgent");
-      const result = await agent.generate(messageBody, {
-        threadId: threadId,
-        resourceId: threadId
-      });
+        try {
+            await twilio.messaging.v2.typingIndicator.create({
+                channel: "whatsapp",
+                messageId: params["MessageSid"],
+            })
+        } catch (error) {
+            logger.warn("Error creating typing indicator", { error });
+        }
 
-      const aiResponse = result.text;
+        const requestContext = new RequestContext();
+        requestContext.set('profile', profile);
 
-      const MessagingResponse = twilio.twiml.MessagingResponse;
-      const response = new MessagingResponse();
-      response.message(aiResponse);
-      c.header("Content-Type", "text/xml");
-      return c.body(response.toString(), 200);
+        const isVerifactuProcessing = profile.verifactu_status === 'processing';
+        const isVerifactuRegistered = profile.verifactu_status === 'registered';
+        const isVerifactuCompleted = profile.verifactu_status === 'completed';
+
+        if (isVerifactuProcessing) {
+            return await twilio.messages.create({
+                from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+                to: `whatsapp:+${threadId}`,
+                body: "Tienes pendiente el proceso de registro de VERI*FACTU. Por favor, entra en el siguiente enlace y sigue los pasos para completar el registro. " + profile.verifactu_link || "",
+            });
+        }
+
+        if (isVerifactuRegistered) {
+            return await twilio.messages.create({
+                from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+                to: `whatsapp:+${threadId}`,
+                body: "Ya hemos recibido tus datos para el registro de VERI*FACTU. Ahora están siendo verificados. Recibirás una notificación cuando el proceso esté completado.",
+            });
+        }
+
+        // Determine if the message contains an image (ticket)
+        const numMedia = parseInt(params["NumMedia"] || "0", 10);
+        const hasImage = numMedia > 0 && (params["MediaContentType0"] || "").startsWith("image/");
+        const bodyText = params["Body"] || "";
+
+        // Decide which agent to use
+        // Simple deterministic routing: if there's an image, use expensesAgent; otherwise onboardingAgent
+        const targetAgentId = isVerifactuCompleted ? "mainAgent" : "onboardingAgent";
+        const agent = c.var.mastra.getAgent(targetAgentId);
+
+        // Build input for the agent
+        let agentInput: string | Record<string, any> = bodyText;
+        if (hasImage) {
+            const imageUrl = params["MediaUrl0"];
+            agentInput = bodyText
+                ? `Mensaje del usuario: "${bodyText}". URL de la imagen del ticket: ${imageUrl}`
+                : `URL de la imagen del ticket: ${imageUrl}`;
+        }
+
+        const result = await agent.generate(agentInput, {
+            requestContext: requestContext,
+            memory: {
+                thread: threadId,
+                resource: profile.id
+            }
+        });
+
+        const aiResponse = result.text;
+
+        return await twilio.messages.create({
+            from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+            to: `whatsapp:+${threadId}`,
+            body: aiResponse,
+        });
 
 
     } catch (error) {
-      logger.error("Error processing message", { error });
-      
-      const MessagingResponse = twilio.twiml.MessagingResponse;
-      const response = new MessagingResponse();
-      response.message("Lo siento, tuve un error técnico. Intenta más tarde.");
-      c.header("Content-Type", "text/xml");
-      return c.body(response.toString(), 200);
+        logger.error("Error processing message", { error: error instanceof Error ? error.message : "Unknown error" });
+
+        return await twilio.messages.create({
+            from: `whatsapp:+${process.env.TWILIO_FROM_NUMBER!}`,
+            to: `whatsapp:+${threadId}`,
+            body: "Lo siento, tuve un error técnico. Intenta más tarde.",
+        });
     }
-  },
-});
+}

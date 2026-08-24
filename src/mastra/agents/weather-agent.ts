@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { weatherTool } from '../tools/weather-tool';
 import { scorers } from '../scorers/weather-scorer';
+import { PostgresStore } from '@mastra/pg';
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -17,11 +18,18 @@ export const weatherAgent = new Agent({
       - Keep responses concise but informative
       - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
       - If the user asks for activities, respond in the format they request.
+      - Don't use Markdown in the responses, use text plain in WhatsApp format.You can use emojis if appropriate. for bold use *word* and for italic use _word_.
 
       Use the weatherTool to fetch current weather data.
 `,
   model: 'openai/gpt-4o',
   tools: { weatherTool },
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'weather-agent-storage',
+      connectionString: process.env.DATABASE_URL,
+    }),
+  }),
   scorers: {
     toolCallAppropriateness: {
       scorer: scorers.toolCallAppropriatenessScorer,
@@ -44,6 +52,5 @@ export const weatherAgent = new Agent({
         rate: 1,
       },
     },
-  },
-  memory: new Memory(),
+  }
 });
